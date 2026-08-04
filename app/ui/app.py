@@ -21,7 +21,7 @@ from ..core.view_state import ViewState
 from ..infra import log
 from ..platform import windows as W
 from . import colors as C
-from . import dialogs, menus
+from . import menus, screens
 from . import widgets as Wg
 from .format import T
 from .images import img_b64, is_launcher_art
@@ -736,15 +736,15 @@ class CenturioUI:
     def _build_content(self):
         screen = self.view.screen
         if screen == "add":
-            return [dialogs.build_add_screen(self)]
+            return [screens.build_add_screen(self)]
         if screen == "settings":
-            return [dialogs.build_settings_screen(self)]
+            return [screens.build_settings_screen(self)]
         if screen == "triage":
-            return [dialogs.build_triage_screen(self)]
+            return [screens.build_triage_screen(self)]
         if self.view.active_set:
             rec = next((s for s in self.sets() if s["id"] == self.view.active_set), None)
             if rec is not None:
-                return [dialogs.build_set_screen(self, rec)]
+                return [screens.build_set_screen(self, rec)]
 
         apps = self.apps()
         if not apps and not self.sets():
@@ -1384,7 +1384,7 @@ class CenturioUI:
             return
         rows = self._palette_rows()
         self._palette_count = len(rows)
-        self.palette_card.content = dialogs.build_palette(self, rows)
+        self.palette_card.content = screens.build_palette(self, rows)
         self.palette_card.opacity = 1
         self.palette_card.offset = ft.Offset(0, 0)
         self.palette_layer.visible = True
@@ -1398,7 +1398,7 @@ class CenturioUI:
             self.bulk_card.opacity = 0
             self.bulk_card.offset = ft.Offset(0, 0.3)
             return
-        self.bulk_card.content = dialogs.build_bulk_bar(self)
+        self.bulk_card.content = screens.build_bulk_bar(self)
         self.bulk_card.opacity = 1
         self.bulk_card.offset = ft.Offset(0, 0)
         self.bulk_layer.visible = True
@@ -2427,7 +2427,7 @@ class CenturioUI:
         height = self._window_height()
         self.popover_layer.left = C.RAIL_W + 8
         self.popover_layer.top = max(C.HEADER_H + 6, min(top, height - C.POPOVER_H - 8))
-        self.popover_layer.content = dialogs.build_category_popover(self, cat)
+        self.popover_layer.content = screens.build_category_popover(self, cat)
         self.popover_layer.visible = True
 
     def _render_onboarding(self):
@@ -2435,7 +2435,7 @@ class CenturioUI:
             self.onboarding_layer.visible = False
             self.onboarding_layer.content = None
             return
-        self.onboarding_layer.content = dialogs.build_onboarding(self)
+        self.onboarding_layer.content = screens.build_onboarding(self)
         self.onboarding_layer.visible = True
 
     def safe_refresh(self):

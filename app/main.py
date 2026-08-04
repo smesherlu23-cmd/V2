@@ -221,10 +221,10 @@ def main(page: ft.Page):
     }
 
     def tray_menu():
-        from app.ui import dialogs
+        from app.ui import screens
         items = [(item["label"], (lambda aid=item["id"]: on_hotkey(aid)))
-                 for item in dialogs.tray_items(store)]
-        return items, dialogs.library_summary(store)
+                 for item in screens.tray_items(store)]
+        return items, screens.library_summary(store)
 
     tray = TrayController(icon_path, on_show=open_search, on_quit=quit_app,
                           on_open_library=open_library, menu_provider=tray_menu)

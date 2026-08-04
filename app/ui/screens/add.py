@@ -1,0 +1,238 @@
+from __future__ import annotations
+
+import flet as ft
+
+from ...core.text import plu_programs
+from .. import colors as C
+from .. import widgets as Wg
+from ..format import T, cat_icon
+from .common import _field, _screen_header
+
+
+def build_add_screen(ui):
+    if ui.scan.scanning():
+        body = _scanning(ui)
+    else:
+        body = _found_list(ui)
+    return ft.Column([_add_header(ui), _add_search(ui), body, _add_footer(ui)],
+                     spacing=0, expand=True)
+
+
+def _add_header(ui):
+    groups = [] if ui.scan.scanning() else ui.scan.found_groups()
+    total = sum(g["total"] for g in groups)
+    fresh = sum(g["new"] for g in groups)
+    if ui.scan.scanning():
+        subtitle = "Смотрим, что установлено"
+    elif total:
+        subtitle = f"{total} {plu_programs(total)} на компьютере, {fresh} из них новые"
+    else:
+        subtitle = "Установленных программ не нашлось"
+
+    rescan = ft.Container(
+        ft.Row([Wg.spinner(15) if ui.scan.scanning()
+                else ft.Icon(ft.Icons.REFRESH, size=15, color=C.MUTED),
+                T("Сканировать снова", size=12.5, color=C.TEXT)],
+               spacing=7, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        height=34, padding=ft.padding.symmetric(0, 12),
+        border=ft.border.all(1, C.LINE_4), border_radius=8,
+        alignment=ft.alignment.center,
+        on_click=None if ui.scan.scanning() else (lambda e: ui.scan.start_scan(force=True)))
+    return _screen_header("Найти и добавить", subtitle if not ui.calm() else None,
+                          ui.back_to_grid, extra=[rescan])
+
+
+def _add_search(ui):
+    if ui.scan.scanning():
+        return ft.Container(height=0)
+    search = ft.Container(
+        ft.Row([ft.Icon(ft.Icons.SEARCH, size=15, color=C.MUTED_2),
+                _field(ui.view.add_query, "Название программы",
+                       on_change=lambda e: ui.scan.set_add_query(e.control.value))],
+               spacing=9, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        height=36, bgcolor=C.PANEL, border=ft.border.all(1, C.LINE), border_radius=9,
+        padding=ft.padding.symmetric(0, 12), expand=True)
+    only_new = ft.Container(
+        ft.Row([T("Только новые", size=12.5, color=C.TEXT),
+                Wg.toggle(ui.view.only_new, lambda v: ui.scan.toggle_only_new(), ui._accent())],
+               spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        height=36, padding=ft.padding.symmetric(0, 12),
+        border=ft.border.all(1, C.LINE), border_radius=9,
+        on_click=lambda e: ui.scan.toggle_only_new())
+
+    path_field = ft.Container(
+        ft.Row([ft.Icon(ft.Icons.LINK, size=15, color=C.MUTED_2),
+                _field(ui.view.manual_path,
+                       r"Или вставьте путь: C:\Program Files\…\app.exe",
+                       on_change=lambda e: ui.scan.set_manual_path(e.control.value),
+                       on_submit=lambda e: ui.scan.add_manual_path(e.control.value),
+                       mono=True, size=11.5)],
+               spacing=9, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        height=36, bgcolor=C.SET_BG, border=ft.border.all(1, C.LINE_4), border_radius=9,
+        padding=ft.padding.symmetric(0, 12), expand=True)
+
+    return ft.Column([
+        ft.Container(ft.Row([search, only_new], spacing=10),
+                     padding=ft.padding.only(24, 14, 24, 6)),
+        ft.Container(ft.Row([path_field,
+                             Wg.outline_btn("Обзор", ui.scan.pick_file, ft.Icons.FOLDER_OPEN),
+                             Wg.outline_btn("Добавить путь", ui.scan.add_manual_path)],
+                            spacing=10),
+                     padding=ft.padding.only(24, 0, 24, 12)),
+    ], spacing=0, tight=True)
+
+
+def _scanning(ui):
+    return ft.Container(
+        ft.Column([Wg.spinner(38), T("Сканирование", size=15, color=C.TEXT_2)],
+                  spacing=22, tight=True,
+                  horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                  alignment=ft.MainAxisAlignment.CENTER),
+        expand=True, alignment=ft.alignment.center)
+
+
+def _found_list(ui):
+    groups = ui.scan.found_groups()
+    rows = [_inline_error(ui, err) for err in ui.scan.scan_errors()]
+    if not groups:
+        rows.append(_add_empty(ui))
+    for group in groups:
+        rows.append(_add_group(ui, group))
+    return ft.Container(ft.Column(rows, spacing=2, scroll=ft.ScrollMode.AUTO, expand=True),
+                        expand=True, padding=ft.padding.only(24, 0, 24, 8))
+
+
+def _inline_error(ui, err):
+    return ft.Container(
+        ft.Row([ft.Icon(ft.Icons.ERROR_OUTLINE, size=16, color=C.DANGER),
+                ft.Column([T(f"{err.get('label') or 'Источник'} не отдал список программ",
+                             size=13, color=C.TEXT),
+                           T("Остальные источники прочитались", size=11.5, color=C.MUTED)],
+                          spacing=3, expand=True, tight=True),
+                Wg.link_btn("Повторить", lambda: ui.scan.start_scan(force=True)),
+                ft.Container(T("Скрыть", size=12.5, color=C.MUTED_2),
+                             on_click=lambda e: ui.scan.dismiss_scan_errors())],
+               spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        bgcolor=C.ERR_BG, border=ft.border.all(1, C.ERR_BORDER), border_radius=12,
+        padding=ft.padding.symmetric(13, 16), margin=ft.margin.only(bottom=8))
+
+
+def _add_empty(ui):
+    only_new = ui.view.only_new
+    return ft.Container(
+        ft.Column([
+            T("Новых программ не нашлось" if only_new else "Ничего не нашлось",
+              size=16, weight=ft.FontWeight.BOLD, color=C.TEXT),
+            T("Всё установленное уже в библиотеке." if only_new
+              else "Автоматический поиск ничего не дал — программу можно указать файлом "
+                   "или вставить путь выше.", size=12.5, color=C.MUTED),
+            ft.Container(ft.Row([
+                Wg.outline_btn("Показать все найденные" if only_new else "Повторить поиск",
+                               ui.scan.toggle_only_new if only_new
+                               else (lambda: ui.scan.start_scan(force=True))),
+                Wg.outline_btn("Выбрать файл", ui.scan.pick_file, ft.Icons.FOLDER_OPEN),
+            ], spacing=8), padding=ft.padding.only(0, 6, 0, 0)),
+        ], spacing=10, tight=True), width=460, padding=ft.padding.only(0, 30, 0, 0))
+
+
+def _add_group(ui, group):
+    keys = [r["key"] for r in group["rows"] if r["is_new"]]
+    picked = [k for k in keys if k in ui.view.add_sel]
+    if keys and len(picked) == len(keys):
+        box = ft.Icons.CHECK_BOX
+        box_color = C.ACCENT
+    elif picked:
+        box = ft.Icons.INDETERMINATE_CHECK_BOX
+        box_color = C.MUTED
+    else:
+        box = ft.Icons.CHECK_BOX_OUTLINE_BLANK
+        box_color = C.MUTED
+
+    head = [ft.Icon(box, size=18, color=box_color),
+            ft.Icon(cat_icon(group["icon"]), size=16, color=C.MUTED_2),
+            T(group["label"], size=12.5, weight=ft.FontWeight.W_600, color=C.TEXT)]
+    if not ui.calm():
+        head.append(T(f"{group['total']} · новых {group['new']}", size=11, color=C.MUTED_2))
+    head.append(ft.Container(height=1, bgcolor=C.LINE_2, expand=True))
+
+    rows = [ft.Container(ft.Row(head, spacing=10,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                         height=36, on_click=lambda e, g=group: ui.scan.toggle_add_group(g))]
+    rows += [_add_row(ui, row) for row in group["rows"]]
+    return ft.Container(ft.Column(rows, spacing=2), padding=ft.padding.only(0, 0, 0, 8))
+
+
+def _add_row(ui, row):
+    checked = row["key"] in ui.view.add_sel
+    if not row["is_new"]:
+        box = ft.Icon(ft.Icons.CHECK_CIRCLE, size=18, color=C.GREEN)
+    else:
+        box = ft.Icon(ft.Icons.CHECK_BOX if checked else ft.Icons.CHECK_BOX_OUTLINE_BLANK,
+                      size=18, color=C.ACCENT if checked else C.MUTED)
+
+    item = row["item"]
+    sub = row["path"]
+    if not row["is_new"]:
+        cat = next((c for c in ui.categories()
+                    if any(a.get("category_id") == c["id"] and
+                           (a.get("path") or "").lower() == row["key"] for a in ui.apps())), None)
+        sub = "уже в библиотеке" + (f" · {cat['name']}" if cat else "")
+    elif item.get("sub"):
+        sub = f"{item['sub']} · обложка найдена" if item.get("poster") else item["sub"]
+
+    controls = [box, ui.icon_slot(item, 30, 8, glyph=16),
+                ft.Column([
+                    T(row["name"], size=13, weight=ft.FontWeight.W_600, color=C.TEXT,
+                      max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                    T("" if ui.calm() else sub, size=10.5, color=C.MUTED_2, max_lines=1,
+                      overflow=ft.TextOverflow.ELLIPSIS,
+                      font_family="monospace" if sub is row["path"] else None),
+                ], spacing=1, expand=True, tight=True)]
+
+    if row["is_new"]:
+        cat_id = ui.scan.add_category_for(row)
+        cat = next((c for c in ui.categories() if c["id"] == cat_id), None)
+        controls.append(ft.Container(
+            ft.Row([Wg.cat_glyph(cat, size=13) if cat
+                    else T("Категория", size=11.5, color=C.MUTED_2),
+                    T(cat["name"], size=11.5, color=C.TEXT_2) if cat else ft.Container(),
+                    ft.Icon(ft.Icons.KEYBOARD_ARROW_DOWN, size=13, color=C.MUTED_2)],
+                   spacing=6, tight=True),
+            height=28, padding=ft.padding.symmetric(0, 10),
+            bgcolor=C.PANEL_3 if cat else None,
+            border=ft.border.all(1, C.LINE if cat else C.LINE_4), border_radius=7,
+            tooltip="Другая категория",
+            on_click=lambda e, r=row: ui.scan.cycle_add_category(r)))
+
+    return ft.Container(
+        ft.Row(controls, spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        height=46, padding=ft.padding.symmetric(0, 12), border_radius=10,
+        bgcolor=C.PANEL if checked else None,
+        border=ft.border.all(1, C.LINE_5) if checked else None,
+        opacity=0.45 if not row["is_new"] else 1,
+        on_click=lambda e, r=row: ui.scan.toggle_add_row(r))
+
+
+def _add_footer(ui):
+    count = len(ui.view.add_sel)
+    left = [T(f"Выбрано {count}" if count else "Ничего не выбрано", size=13,
+              weight=ft.FontWeight.W_600, color=C.TEXT)]
+    if not ui.calm():
+        left.append(T("Категория предложена по источнику — поменяйте в строке",
+                      size=12, color=C.MUTED_2))
+    add_label = f"Добавить {count}" if count else "Добавить"
+    add_row = [T(add_label, size=13, weight=ft.FontWeight.W_600, color=C.ON_ACCENT)]
+    if not ui.calm():
+        add_row.append(T("Ctrl+Enter", size=10.5, color=C.ON_ACCENT, opacity=0.55,
+                         font_family="monospace"))
+    return ft.Container(
+        ft.Row(left + [
+            ft.Container(expand=True),
+            Wg.outline_btn("Отложить в разбор", ui.scan.defer_add, ft.Icons.INBOX),
+            ft.Container(ft.Row(add_row, spacing=8, tight=True), height=36,
+                         padding=ft.padding.symmetric(0, 16), bgcolor=ui._accent(),
+                         border_radius=9, alignment=ft.alignment.center,
+                         on_click=lambda e: ui.scan.commit_add()),
+        ], spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        height=64, bgcolor=C.BG_2, padding=ft.padding.symmetric(0, 24),
+        border=ft.border.only(top=ft.BorderSide(1, C.LINE_2)))

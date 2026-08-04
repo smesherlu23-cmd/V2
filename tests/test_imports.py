@@ -48,10 +48,13 @@ def _exported_names(path: Path) -> set[str]:
     return names
 
 
-def _target_module(module: str, node: ast.ImportFrom) -> str:
+def _target_module(module: str, path: Path, node: ast.ImportFrom) -> str:
     if not node.level:
         return node.module or ""
-    base = module.split(".")[: -node.level]
+    parts = module.split(".")
+    if path.name != "__init__.py":
+        parts = parts[:-1]
+    base = parts[: len(parts) - node.level + 1]
     return ".".join(base + ([node.module] if node.module else []))
 
 
@@ -71,7 +74,7 @@ def test_internal_imports_resolve():
                 continue
             if not isinstance(node, ast.ImportFrom):
                 continue
-            target = _target_module(module, node)
+            target = _target_module(module, path, node)
             if not target.startswith(PACKAGE):
                 continue
             if target not in modules:
@@ -99,7 +102,7 @@ def test_layers_do_not_depend_outwards():
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if not isinstance(node, ast.ImportFrom):
                 continue
-            target = _target_module(module, node)
+            target = _target_module(module, path, node)
             bits = target.split(".")
             if len(bits) < 2 or bits[0] != PACKAGE or bits[1] not in rank:
                 continue

@@ -975,6 +975,24 @@ def _read(*parts) -> str:
         return fh.read()
 
 
+def _sources(*relative_dirs) -> list[tuple[str, str]]:
+    """Каждый .py под указанными каталогами app/ как (подпись, текст).
+
+    Перечисление идёт по диску, а не списком имён: разбиение файла на модули
+    не должно тихо выводить его из-под проверки.
+    """
+    out: list[tuple[str, str]] = []
+    for relative in relative_dirs:
+        base = Path(_ROOT) / "app" / relative
+        paths = sorted(base.rglob("*.py")) if base.is_dir() else [base]
+        for path in paths:
+            if "__pycache__" in path.parts:
+                continue
+            label = path.relative_to(Path(_ROOT)).as_posix()
+            out.append((label, path.read_text(encoding="utf-8")))
+    return out
+
+
 def test_no_duplicate_icon_lists():
     """format.ICON_PACK is the one list of category icons.
 
@@ -1603,17 +1621,15 @@ def _menu_labels(ui):
 
 def test_no_modal_dialogs():
     """Приёмка: ни одного AlertDialog в коде."""
-    for parts in (("ui", "app.py"), ("ui", "dialogs.py"), ("main.py",),
-                  ("ui", "toast.py"), ("ui", "menus.py")):
-        source = _read("app", *parts)
-        module = "/".join(parts)
-        ok("AlertDialog(" not in source, f"app/{module} opens no modal dialog")
-        ok("SnackBar(" not in source, f"app/{module} doesn't fall back to a snack bar")
+    screens = _sources("ui", "main.py")
+    for label, source in screens:
+        ok("AlertDialog(" not in source, f"{label} opens no modal dialog")
+        ok("SnackBar(" not in source, f"{label} doesn't fall back to a snack bar")
 
-    dialogs = _read("app", "ui", "dialogs.py")
+    everything = "".join(source for _label, source in screens)
     for gone in ("open_app_dialog", "open_context_menu", "open_settings_dialog",
                  "open_categories_dialog", "def confirm("):
-        ok(gone not in dialogs, f"the old {gone.strip('def (')} entry point is gone")
+        ok(gone not in everything, f"the old {gone.strip('def (')} entry point is gone")
 
 
 def test_translucent_colours_put_alpha_first():
@@ -1656,12 +1672,12 @@ def test_colours_come_from_one_file():
     import re
 
     offenders = []
-    for parts in (("ui", "app.py"), ("ui", "dialogs.py"), ("ui", "menus.py"),
-                  ("ui", "toast.py")):
-        module = "/".join(parts)
-        for index, line in enumerate(_read("app", *parts).splitlines(), 1):
+    for label, source in _sources("ui"):
+        if label.endswith("ui/colors.py"):
+            continue
+        for index, line in enumerate(source.splitlines(), 1):
             for hexval in re.findall(r'"(#[0-9a-fA-F]{3,8})"', line):
-                offenders.append(f"app/{module}:{index} {hexval}")
+                offenders.append(f"{label}:{index} {hexval}")
     ok(not offenders,
        "every colour is a token: " + ("; ".join(offenders[:5]) or "no literals"))
 
@@ -1680,23 +1696,20 @@ def test_ui_text_stays_inside_the_bundled_fonts():
 
     allowed = set("«»—–…·×→↑↓№°")
     offenders = []
-    for parts in (("ui", "app.py"), ("ui", "dialogs.py"), ("ui", "menus.py"),
-                  ("ui", "toast.py"), ("core", "queries.py"), ("ui", "format.py"),
-                  ("core", "text.py"), ("core", "store.py"), ("core", "hotkeys.py"),
-                  ("core", "layout.py"), ("platform", "windows.py")):
-        module = "/".join(parts)
-        tree = ast.parse(_read("app", *parts))
+    for label, source in _sources("ui", "core", "platform/windows.py"):
+        module = label
+        tree = ast.parse(source)
         for node in ast.walk(tree):
             if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
                 continue
             for ch in node.value:
                 if ord(ch) < 128 or ch.isalpha() or ch in allowed:
                     continue
-                offenders.append(f"app/{module}:{node.lineno} {ch!r} "
+                offenders.append(f"{module}:{node.lineno} {ch!r} "
                                  f"({unicodedata.name(ch, '?')})")
     ok(not offenders, "every character shown has a glyph: " + ("; ".join(offenders[:5])
                                                                or "none missing"))
-    ok("↵" not in _read("app", "ui", "app.py") + _read("app", "ui", "dialogs.py"),
+    ok(not any("↵" in source for _label, source in _sources("ui")),
        "the Enter arrow in particular is spelled out, because no bundled font has it")
 
 
@@ -3422,7 +3435,7 @@ def test_shutdown_releases_resources():
 def test_tray_mini_launcher():
     try:
         from app.platform.tray import TrayController
-        from app.ui import dialogs
+        from app.ui import screens as dialogs
     except Exception as exc:
         skip("tray test", exc)
         return
