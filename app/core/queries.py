@@ -1,6 +1,6 @@
 from __future__ import annotations
-from .text import plu_programs
-from .text import plu_windows, short_ago
+
+from .text import plu_programs, plu_windows, short_ago
 
 SORT_KEYS = ("alpha", "recent", "added", "manual")
 
@@ -165,7 +165,7 @@ def has_layout(rec: dict) -> bool:
     return any(i.get("slot") is not None or i.get("rect") for i in rec.get("items", []))
 
 
-def set_summary(rec: dict) -> str:    
+def set_summary(rec: dict) -> str:
     count = len(rec.get("items", []))
     text = f"{count} {plu_programs(count)}"
     return f"{text} · раскладка" if has_layout(rec) else text
@@ -179,7 +179,7 @@ def set_palette_sub(rec: dict, members: list[str]) -> str:
     return f"{text} · с раскладкой" if has_layout(rec) else text
 
 
-def app_palette_sub(row: dict, windows: int = 0) -> str:    
+def app_palette_sub(row: dict, windows: int = 0) -> str:
     parts = [row["cat"]] if row["cat"] else []
     if row["note"] == "открыто":
         parts.append(f"открыто, {windows} {plu_windows(windows)}" if windows > 1 else "открыто")

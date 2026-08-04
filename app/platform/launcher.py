@@ -16,9 +16,9 @@ _DETACHED_PROCESS = 0x00000008
 
 class Launcher:
     def __init__(self, on_change=None):
-        self._procs: dict[str, subprocess.Popen] = {}  
-        self._name_ids: set[str] = set()                
-        self._exe_index: dict[str, set[str]] = {}       
+        self._procs: dict[str, subprocess.Popen] = {}
+        self._name_ids: set[str] = set()
+        self._exe_index: dict[str, set[str]] = {}
         self._last_emit: frozenset[str] = frozenset()
         self._lock = threading.Lock()
         self._monitor_stop = None
@@ -77,7 +77,7 @@ class Launcher:
 
     def start_monitor(self, interval: float = 4.0, idle_interval: float = 25.0):
         try:
-            import psutil
+            pass
         except Exception:
             return False
         with self._lock:

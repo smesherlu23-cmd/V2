@@ -9,9 +9,9 @@ import time
 import uuid
 from pathlib import Path
 
-from . import layout as L
 from ..infra import log
 from ..infra.debounce import Debounce
+from . import layout as L
 
 DEFAULT_CATEGORIES = [
     {"id": "work", "name": "Работа", "icon": "work", "color": "#ffffff", "order": 0},
@@ -43,10 +43,10 @@ DEFAULT_SETTINGS = {
     "win_max": False,
     "icon_schema": 0,
     "launch_hotkey": DEFAULT_LAUNCH_HOTKEY,
-    "hide_after": True,     
-    "triage": True,          
-    "calm": False,           
-    "hints": True,          
+    "hide_after": True,
+    "triage": True,
+    "calm": False,
+    "hints": True,
     "debug_log": False,
     "onboarded": False,
     "collapsed": [],
@@ -267,7 +267,7 @@ class Store:
 
     def _load(self) -> dict:
         try:
-            with open(self.path, "r", encoding="utf-8") as fh:
+            with open(self.path, encoding="utf-8") as fh:
                 raw = fh.read()
         except FileNotFoundError:
             return self._defaults()
@@ -782,7 +782,7 @@ class Store:
 
     def import_data(self, src: str | Path, merge: bool = False) -> bool:
         try:
-            with open(src, "r", encoding="utf-8") as fh:
+            with open(src, encoding="utf-8") as fh:
                 incoming = json.load(fh)
         except (OSError, json.JSONDecodeError):
             return False

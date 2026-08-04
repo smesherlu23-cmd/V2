@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ..infra import log
 
+
 class TrayController:
     def __init__(self, icon_path: Path | str, on_show=None, on_quit=None,
                  on_open_library=None, menu_provider=None):

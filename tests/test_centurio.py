@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 import time
+import traceback
 from pathlib import Path
 
 try:
@@ -17,36 +18,56 @@ except Exception:            # проверяется отдельно, тест
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.core.store import Store, hue_from_string          # noqa: E402
-from app.ui import colors as C                           # noqa: E402
-from app.ui import iconify                               # noqa: E402
+from app.core.store import Store, hue_from_string  # noqa: E402
+from app.ui import colors as C  # noqa: E402
+from app.ui import iconify  # noqa: E402
+
+try:
+    import pytest
+except ImportError:
+    pytest = None
 
 _passed = 0
 _failed = 0
 _skipped: list[str] = []
 
 
+class CheckFailed(AssertionError):
+    """One ok() check that did not hold."""
+
+
 def ok(cond, msg):
+    """Assert one named expectation.
+
+    Raises rather than counting, so pytest attributes the failure to the test
+    that produced it and the rest of the suite still runs. Before this, a
+    failed check only incremented a counter, so under pytest every test
+    reported green; under the standalone runner the first unhandled error
+    ended the whole run.
+    """
     global _passed, _failed
     if cond:
         _passed += 1
-    else:
-        _failed += 1
-        print("FAIL:", msg)
+        return
+    _failed += 1
+    raise CheckFailed(msg)
 
 
 def skip(name, reason):
-    """Record a Flet-unavailable skip.
+    """Skip a test that needs Flet, or fail if Flet should have been there.
 
-    A bare print() here used to let a broken Flet install pass CI silently —
-    three UI tests would print "SKIP" and the run still exited 0. _summarize()
-    below turns any skip into a failure when running under CI, since the
-    workflow installs Flet as a hard requirement and a skip there means
-    something is actually wrong, not "Flet isn't installed, which is fine for
-    a local logic-only run."
+    Under CI the workflow installs Flet as a hard requirement, so a skip means
+    something is actually wrong rather than "Flet isn't installed, which is
+    fine for a local logic-only run". _summarize() keeps the same rule for the
+    standalone runner as a second guard.
     """
     _skipped.append(name)
-    print(f"SKIP {name} (Flet unavailable):", reason)
+    message = f"{name} (Flet unavailable): {reason}"
+    if os.environ.get("CI"):
+        raise CheckFailed(f"skipped under CI, where Flet is required — {message}")
+    if pytest is not None and "PYTEST_CURRENT_TEST" in os.environ:
+        pytest.skip(message)
+    print("SKIP", message)
 
 
 def _summarize(passed: int, failed: int, skipped: list[str], is_ci: bool) -> tuple[int, str]:
@@ -101,7 +122,7 @@ def test_store():
         s.reorder_apps([b["id"], a["id"]])
         ok(s.get_app(b["id"])["order"] == 0 and s.get_app(a["id"])["order"] == 1,
            "reorder_apps assigns order")
-        s.remove_app(b["id"])  
+        s.remove_app(b["id"])
 
         s.set_setting("view_mode", "list")
         s.set_setting("view_filter", "favorites")
@@ -121,7 +142,7 @@ def test_store():
         ok(got_cat["color"] == "#ff8800" and got_cat["icon"] == "sports_esports",
            "category colour + icon updated")
 
-        s.move_category(cat["id"], -1) 
+        s.move_category(cat["id"], -1)
         order_ids = [c["id"] for c in sorted(s.state()["categories"], key=lambda c: c["order"])]
         ok(order_ids.index(cat["id"]) == len(order_ids) - 2, "move_category shifts order")
 
@@ -577,8 +598,8 @@ def test_store_write_failure():
 
 def test_store_batched_writes():
     """Bulk paths write the file once, not once per record."""
-    from app.platform import discovery
     from app.core.view_state import ViewState
+    from app.platform import discovery
 
     with tempfile.TemporaryDirectory() as d:
         s = Store(os.path.join(d, "data.json"))
@@ -960,8 +981,8 @@ def test_no_duplicate_icon_lists():
     store.CATEGORY_ICONS and format.CATEGORY_ICON_CHOICES were byte-identical
     copies of each other that nothing read.
     """
-    from app.ui import format as fmt
     from app.core import store as store_mod
+    from app.ui import format as fmt
 
     ok(not hasattr(store_mod, "CATEGORY_ICONS"), "store carries no icon list of its own")
     ok(not hasattr(fmt, "CATEGORY_ICON_CHOICES"), "the unread choices copy is gone")
@@ -1390,7 +1411,7 @@ def test_log():
     import importlib
 
     from app.infra import log as _log
-    importlib.reload(_log)  
+    importlib.reload(_log)
     import logging
     with tempfile.TemporaryDirectory() as d:
         _log.setup(debug=True, log_dir=d)
@@ -1807,8 +1828,8 @@ def test_ui_matches_the_design_sizes():
         store = Store(os.path.join(d, "data.json"))
         poster = os.path.join(d, "poster.png")
         iconify.generate_icon(poster, 64)
-        game = store.add_app({"name": "CS2", "path": "steam://rungameid/730",
-                              "category_id": "games", "poster": poster})["id"]
+        store.add_app({"name": "CS2", "path": "steam://rungameid/730",
+                       "category_id": "games", "poster": poster})
         app_id = store.add_app({"name": "Excel", "path": "C:/x.exe",
                                 "category_id": "work", "quick": True})["id"]
         second = store.add_app({"name": "Teams", "path": "C:/t.exe",
@@ -3054,6 +3075,7 @@ def test_ui_keyboard():
 def test_ui_icons_are_never_letters():
     try:
         import flet as ft
+
         from app.ui.app import CenturioUI  # noqa: F401
     except Exception as exc:
         skip("UI icon test", exc)
@@ -3399,8 +3421,8 @@ def test_shutdown_releases_resources():
 
 def test_tray_mini_launcher():
     try:
-        from app.ui import dialogs
         from app.platform.tray import TrayController
+        from app.ui import dialogs
     except Exception as exc:
         skip("tray test", exc)
         return
@@ -3522,77 +3544,27 @@ def test_ui_discovery_reuse():
         _settle_threads(before)
 
 
-if __name__ == "__main__":
-    test_store()
-    test_store_sets_inbox_undo()
-    test_store_set_layout()
-    test_layout_presets()
-    test_window_helpers()
-    test_store_concurrency()
-    test_store_load_validation()
-    test_store_write_failure()
-    test_store_batched_writes()
-    test_image_cache_bounded()
-    test_store_corrupt_recovery()
-    test_cdn_circuit_breaker()
-    test_hotkey_rejection()
-    test_ci_skip_escalation()
-    test_hotkey_no_double_launch()
-    test_geometry_debounce()
-    test_autostart()
-    test_no_duplicate_icon_lists()
-    test_admin_argument_quoting()
-    test_packaging_metadata()
-    test_single_entry_point()
-    test_colors()
-    test_icon()
-    test_discovery()
-    test_discovery_sources()
-    test_hotkeys()
-    test_launcher_index()
-    test_launcher_monitor_lifecycle()
-    test_launcher_emit()
-    test_color_parsing()
-    test_launch_options()
-    test_data_ops()
-    test_log()
-    test_queries()
-    test_no_modal_dialogs()
-    test_translucent_colours_put_alpha_first()
-    test_colours_come_from_one_file()
-    test_ui_text_stays_inside_the_bundled_fonts()
-    test_ui_single_screen_layout()
-    test_ui_matches_the_design_sizes()
-    test_process_monitor_backs_off()
-    test_steam_exe_lookup_is_cached()
-    test_icon_cache_pruning()
-    test_ui_tile_cache()
-    test_ui_skips_work_while_hidden()
-    test_ui_inbox_badge_and_triage()
-    test_ui_context_menus()
-    test_ui_inspector_replaces_the_modal_form()
-    test_ui_delete_is_undone_not_confirmed()
-    test_ui_sets()
-    test_ui_click_launches_right_click_inspects()
-    test_ui_bulk_operations()
-    test_ui_quick_numbers_match_the_hotkeys()
-    test_ui_add_screen()
-    test_ui_scanning_is_just_a_spinner()
-    test_ui_category_popover()
-    test_ui_calm_mode()
-    test_ui_search_palette()
-    test_ui_launch_failure_offers_a_way_out()
-    test_ui_keyboard()
-    test_ui_icons_are_never_letters()
-    test_ui_settings_screen()
-    test_ui_first_run()
-    test_toast_lifecycle()
-    test_ui_settings_cache()
-    test_ui_refresh_thread_safety()
-    test_shutdown_releases_resources()
-    test_tray_mini_launcher()
-    test_ui_background_rescan()
-    test_ui_discovery_reuse()
+
+def _all_tests():
+    return [(name, fn) for name, fn in list(globals().items())
+            if name.startswith("test_") and callable(fn)]
+
+
+def _run_standalone() -> int:
+    for name, fn in _all_tests():
+        try:
+            fn()
+        except CheckFailed as exc:
+            print(f"FAIL: {exc}")
+        except Exception:
+            global _failed
+            _failed += 1
+            print(f"FAIL: {name} raised")
+            traceback.print_exc()
     code, line = _summarize(_passed, _failed, _skipped, bool(os.environ.get("CI")))
     print(f"\n{line}")
-    sys.exit(code)
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(_run_standalone())

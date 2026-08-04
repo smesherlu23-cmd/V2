@@ -168,7 +168,7 @@ if($r){ Write-Output $r }
 def _run_powershell(script: str, timeout: int = 60):
     return subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
                           capture_output=True, text=True, encoding="utf-8", errors="replace",
-                          timeout=timeout, creationflags=0x08000000) 
+                          timeout=timeout, creationflags=0x08000000)
 
 
 def _ps_literal(value: str | None) -> str:
@@ -222,7 +222,7 @@ def _win_extract_one(path: str, icon_cache: str) -> str | None:
     return out if out and os.path.exists(out) else None
 
 
-_STEAM_SKIP_ID = {"228980"} 
+_STEAM_SKIP_ID = {"228980"}
 _STEAM_SKIP_NAME = ("steamworks common", "proton", "steam linux runtime", "steamvr media")
 _STEAM_EXE_JUNK = ("unins", "uninstall", "vcredist", "vc_redist", "dxsetup", "dxwebsetup",
                    "directx", "redist", "crashhandler", "crashreport", "launcher", "setup",
@@ -309,7 +309,7 @@ def _steam_game_exe(lib: str, installdir: str | None, name: str,
             if not fn.lower().endswith(".exe"):
                 continue
             seen += 1
-            if seen > 20000:     
+            if seen > 20000:
                 break
             low = fn.lower()
             if any(j in low for j in _STEAM_EXE_JUNK):
@@ -385,14 +385,14 @@ def _steam_libraries(root: str) -> list[str]:
 
 
 def _vdf_val(text: str, key: str) -> str | None:
-    m = re.search(r'"%s"\s*"([^"]*)"' % re.escape(key), text, re.IGNORECASE)
+    m = re.search(rf'"{re.escape(key)}"\s*"([^"]*)"', text, re.IGNORECASE)
     return m.group(1) if m else None
 
 
 _STEAM_ART_NAMES = (
-    "capsule_616x353.jpg", 
-    "header.jpg",            
-    "library_hero.jpg",      
+    "capsule_616x353.jpg",
+    "header.jpg",
+    "library_hero.jpg",
     "capsule_231x87.jpg",
 )
 _STEAM_PORTRAIT_HINTS = ("600x900", "library_600x900", "portrait")

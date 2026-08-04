@@ -4,8 +4,8 @@ import threading
 
 import flet as ft
 
-from . import colors as C
 from ..infra import log
+from . import colors as C
 from .format import T
 
 PLAIN_SECONDS = 2.6

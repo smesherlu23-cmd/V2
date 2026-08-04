@@ -90,7 +90,7 @@ def _svg_markup(path) -> str | None:
     if cached is not None:
         return cached
     try:
-        with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+        with open(path, encoding="utf-8", errors="ignore") as fh:
             text = fh.read()
     except OSError:
         return None
@@ -98,7 +98,7 @@ def _svg_markup(path) -> str | None:
     return text
 
 
-def icon_image(path, **kw) -> "ft.Image | None":
+def icon_image(path, **kw) -> ft.Image | None:
     b64 = img_b64(path)
     if b64:
         return ft.Image(src_base64=b64, **kw)

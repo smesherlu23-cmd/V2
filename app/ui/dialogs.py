@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import flet as ft
 
-from . import colors as C
-from . import widgets as Wg
-from .format import ICON_PACK, T, cat_icon
 from .. import __version__
 from ..core import layout as L
 from ..core import queries
 from ..core.hotkeys import format_accel
 from ..core.text import plu_apps, plu_programs
+from . import colors as C
+from . import widgets as Wg
+from .format import ICON_PACK, T, cat_icon
 
 ACCENT_NAMES = dict(zip(C.ACCENT_CHOICES, ("Белый", "Синий", "Бирюзовый", "Оранжевый")))
 
@@ -719,7 +719,7 @@ def _order_row(ui, rec, entry):
         on_leave=lambda e, r=row: ui._highlight_drop(r, False, rest))
 
 
-# 06–07 
+# 06–07
 
 def build_triage_screen(ui):
     queue = ui.inbox()

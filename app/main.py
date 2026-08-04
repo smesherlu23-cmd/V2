@@ -8,8 +8,15 @@ from pathlib import Path
 
 import flet as ft
 
-from app.core.hotkeys import (TOGGLE_LAUNCH, HotkeyManager, app_for_accel, quick_bindings,
-                              set_bindings, set_for_accel, split_binding)
+from app.core.hotkeys import (
+    TOGGLE_LAUNCH,
+    HotkeyManager,
+    app_for_accel,
+    quick_bindings,
+    set_bindings,
+    set_for_accel,
+    split_binding,
+)
 from app.core.store import DEFAULT_LAUNCH_HOTKEY, Store
 from app.infra import log
 from app.infra.debounce import Debounce

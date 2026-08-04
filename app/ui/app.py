@@ -8,14 +8,6 @@ from pathlib import Path
 
 import flet as ft
 
-from . import colors as C
-from . import menus
-from . import dialogs
-from . import widgets as Wg
-from .format import T
-from .images import img_b64, is_launcher_art
-from .menus import MenuHost
-from .toast import ToastHost
 from .. import __version__
 from ..controllers.scan import ScanController
 from ..controllers.sets import SetsController
@@ -24,11 +16,17 @@ from ..core import layout as L
 from ..core import queries
 from ..core.hotkeys import free_quick_slot, is_reserved, quick_accels, set_accels
 from ..core.store import Store
-from ..core.text import (plu_apps, plu_hits, plu_programs, plu_windows,
-                         short_ago, time_ago)
+from ..core.text import plu_apps, plu_hits, plu_programs, plu_windows, short_ago, time_ago
 from ..core.view_state import ViewState
 from ..infra import log
 from ..platform import windows as W
+from . import colors as C
+from . import dialogs, menus
+from . import widgets as Wg
+from .format import T
+from .images import img_b64, is_launcher_art
+from .menus import MenuHost
+from .toast import ToastHost
 
 WINDOW_TTL = 2.0
 HEADER_SIDES_W = 320
@@ -734,7 +732,7 @@ class CenturioUI:
             padding=ft.padding.only(22, 16, 22, 10),
         )
 
-    def _build_content(self):        
+    def _build_content(self):
         screen = self.view.screen
         if screen == "add":
             return [dialogs.build_add_screen(self)]
@@ -1390,7 +1388,7 @@ class CenturioUI:
         self.palette_card.offset = ft.Offset(0, 0)
         self.palette_layer.visible = True
 
-    def _render_bulk_bar(self):        
+    def _render_bulk_bar(self):
         showing = bool(self.view.select_mode and self.view.sel)
         self.toast.lift(showing)
         if not showing:

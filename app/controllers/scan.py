@@ -10,8 +10,8 @@ import flet as ft
 from ..core import queries
 from ..core.text import plu_apps
 from ..infra import log
-from ..ui import colors as C
 from ..platform import discovery
+from ..ui import colors as C
 
 DISCOVERY_TTL = 120.0
 
@@ -252,7 +252,7 @@ class ScanController:
         self.ui.refresh()
 
     def backfill_icons_async(self):
-        def work():            
+        def work():
             try:
                 if discovery.backfill_icons(self.store, self.ui.icon_cache_dir()):
                     self.ui._on_library_changed()
@@ -265,7 +265,7 @@ class ScanController:
             self.ui.toast.show("Смотрю, что установлено", icon=ft.Icons.SEARCH,
                                icon_color=C.MUTED)
 
-        def work():            
+        def work():
             try:
                 cache = self.ui.icon_cache_dir()
                 if not silent:
