@@ -22,38 +22,38 @@ GREEN = "#4ade80"
 DANGER = "#e34f4f"
 STAR = "#f5c518"
 
-CONTROL = "#23232b"          
-RAIL_BTN_BG = "#101014"      
+CONTROL = "#23232b"
+RAIL_BTN_BG = "#101014"
 
-ACCENT = "#f5f5f7"          
-ON_ACCENT = "#0b0b0d"        
-WHITE = "#ffffff"           
+ACCENT = "#f5f5f7"
+ON_ACCENT = "#0b0b0d"
+WHITE = "#ffffff"
 
 SLOT_BG = "#15151b"
 SLOT_BORDER = "#26262e"
 SLOT_GLYPH = "#7f8590"
 
-TEXT_DIM = "#5a5f68"      
-TEXT_FAINT = "#4a4f58"       
-TEXT_GHOST = "#2e2e37"       
-HINT = "#33383f"             
-WINDOW_BORDER = "#23232b"    
-PANEL_ACTIVE = "#1e1e22"     
-DASHED_RAIL = "#3a3a44"      
-MATCH_BG = "#2b2b33"         
-TOGGLE_OFF = "#2a2a30"       
-DOT = "#43434c"              
-SEGMENT_BORDER = "#1e1e25"   
-PROGRESS_TRACK = "#1a1a21"   
-SLOT_BORDER_SEL = "#2e2e38"  
+TEXT_DIM = "#5a5f68"
+TEXT_FAINT = "#4a4f58"
+TEXT_GHOST = "#2e2e37"
+HINT = "#33383f"
+WINDOW_BORDER = "#23232b"
+PANEL_ACTIVE = "#1e1e22"
+DASHED_RAIL = "#3a3a44"
+MATCH_BG = "#2b2b33"
+TOGGLE_OFF = "#2a2a30"
+DOT = "#43434c"
+SEGMENT_BORDER = "#1e1e25"
+PROGRESS_TRACK = "#1a1a21"
+SLOT_BORDER_SEL = "#2e2e38"
 SLOT_GLYPH_SEL = "#8f959f"
 
-SELECTED_BG = "#141418"      
+SELECTED_BG = "#141418"
 MENU_BORDER = "#2c2c33"
 TOAST_BG = "#17171b"
 TOAST_BORDER = "#2e2e38"
 
-BADGE_BG = "#0c100e"        
+BADGE_BG = "#0c100e"
 BADGE_BORDER = "#2a5f42"
 BADGE_TEXT = "#d8fce6"
 GREEN_TEXT = "#7ee2a8"
@@ -67,25 +67,25 @@ SET_BG = "#0e0e12"
 SET_BORDER = "#1c1c23"
 SET_SLOT_BG = "#131318"
 SET_SLOT_BORDER = "#202028"
-DASHED = "#1f1f27"           
+DASHED = "#1f1f27"
 
 PALETTE_BG = "#101015"
 PALETTE_BORDER = "#2a2a33"
 PALETTE_FOOT = "#0c0c10"
 PALETTE_FOOT_BORDER = "#1c1c23"
-PALETTE_ROW = "#1c1c23"       
-SCRIM_BODY = "#99050507"      
-SHADOW_PALETTE = "#cc000000"  
+PALETTE_ROW = "#1c1c23"
+SCRIM_BODY = "#99050507"
+SHADOW_PALETTE = "#cc000000"
 FIELD_ACTIVE_BG = "#15151c"
 FIELD_ACTIVE_BORDER = "#4a4f58"
 
 BAR_BG = "#16161d"
 BAR_BORDER = "#33333a"
 BAR_BTN = "#1f1f27"
-SHADOW_BAR = "#a6000000"      
+SHADOW_BAR = "#a6000000"
 
 CANVAS_BG = "#0e0e12"
-PRESET_ACTIVE_BG = "#16161c"   
+PRESET_ACTIVE_BG = "#16161c"
 WIN_BG = "#15151d"
 WIN_BORDER = "#2c2c36"
 WIN_BORDER_ACTIVE = "#3a3a44"
@@ -98,10 +98,10 @@ DONE_BG = "#0e130f"
 DONE_BORDER = "#244530"
 
 TRANSPARENT = "#00000000"
-SCRIM = "#dd0c0c0e"          
-OVERLAY = "#99050506"        
-SHADOW_MENU = "#b3000000"   
-SHADOW_TOAST = "#99000000"   
+SCRIM = "#dd0c0c0e"
+OVERLAY = "#99050506"
+SHADOW_MENU = "#b3000000"
+SHADOW_TOAST = "#99000000"
 
 CAT_PALETTE = ("#e6e6e8", "#f5c518", "#f0a020", "#e34f4f",
                "#b06cf0", "#4f7dff", "#3ecfaf", "#7a8290",
@@ -139,12 +139,12 @@ LIBRARY_MIN_W = 940
 LIBRARY_MIN_H = 620
 MENU_W = 300
 POPOVER_W = 330
-POPOVER_H = 486       
+POPOVER_H = 486
 TOAST_MIN_W = 360
 TOAST_MAX_W = 520
-SET_SIDE_W = 300      
-SETTINGS_NAV_W = 200  
-CANVAS_H = 280       
+SET_SIDE_W = 300
+SETTINGS_NAV_W = 200
+CANVAS_H = 280
 
 NARROW_INSPECTOR = 1200
 NARROW_SIDEBAR = 1000
@@ -156,9 +156,7 @@ ANIM_BAR = 140
 
 def _hex(rgb) -> str:
     r, g, b = rgb
-    return "#%02x%02x%02x" % (max(0, min(255, round(r * 255))),
-                              max(0, min(255, round(g * 255))),
-                              max(0, min(255, round(b * 255))))
+    return rgb_to_hex(round(r * 255), round(g * 255), round(b * 255))
 
 
 def cover_colors(hue: int) -> tuple[str, str]:
@@ -204,14 +202,17 @@ def hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
     return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
 
 
+def _byte(value) -> int:
+    return max(0, min(255, int(value)))
+
+
 def rgb_to_hex(r: int, g: int, b: int) -> str:
-    clamp = lambda v: max(0, min(255, int(v)))
-    return "#%02x%02x%02x" % (clamp(r), clamp(g), clamp(b))
+    return f"#{_byte(r):02x}{_byte(g):02x}{_byte(b):02x}"
 
 
 def with_alpha(hex_color: str, alpha: float) -> str:
     base = (parse_hex(hex_color) or "#000000").lstrip("#")
-    return "#%02x%s" % (max(0, min(255, round(alpha * 255))), base)
+    return f"#{_byte(round(alpha * 255)):02x}{base}"
 
 
 def hsl_to_hex(hue: float, lightness: float, saturation: float = 0.62) -> str:

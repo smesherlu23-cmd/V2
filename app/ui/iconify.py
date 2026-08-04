@@ -85,7 +85,7 @@ def _png(rgba: bytearray, size: int) -> bytes:
     stride = size * 4
     raw = bytearray()
     for y in range(size):
-        raw.append(0) 
+        raw.append(0)
         raw.extend(rgba[y * stride:(y + 1) * stride])
     idat = zlib.compress(bytes(raw), 9)
     return sig + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")

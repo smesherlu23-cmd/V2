@@ -3,14 +3,11 @@ from __future__ import annotations
 import threading
 import time
 
-import flet as ft
-
 from ..core import layout as L
 from ..core import queries
 from ..core.text import plu_programs, plu_windows
 from ..infra import log
 from ..platform import windows as W
-from ..ui import colors as C
 
 
 class SetsController:
@@ -18,6 +15,7 @@ class SetsController:
         self.ui = ui
         self.store = ui.store
         self.launcher = ui.launcher
+        self.notify = ui.notify
 
     def launch_set(self, set_id, from_palette: bool = False):
         rec = self.store.get_set(set_id)
@@ -27,8 +25,8 @@ class SetsController:
             self.ui.view.close_palette()
             self.ui.search_field.value = ""
         count = len(rec["items"])
-        self.ui.toast.show(f"Открываю «{rec['name']}» · {count} {plu_programs(count)}",
-                           icon=ft.Icons.LAYERS)
+        self.notify.show(f"Открываю «{rec['name']}» · {count} {plu_programs(count)}",
+                           icon="layers")
         self.ui.refresh()
         threading.Thread(target=lambda: self._run_set(rec, from_palette),
                          daemon=True).start()
@@ -55,20 +53,20 @@ class SetsController:
                     failed += 1
             self.ui.running = set(self.launcher.running_ids())
             if not started:
-                self.ui.toast.error(f"Ни одна программа из «{rec['name']}» не запустилась")
-                self.ui._safe_refresh()
+                self.notify.error(f"Ни одна программа из «{rec['name']}» не запустилась")
+                self.ui.safe_refresh()
                 return
             text = "Открыто: " + ", ".join(started)
             if failed:
                 text += f" · не удалось: {failed}"
-            self.ui.toast.show(text, icon=ft.Icons.LAYERS)
+            self.notify.show(text, icon="layers")
             if W.available() and queries.has_layout(rec):
                 time.sleep(max(0.5, delay))
                 self.arrange_set(rec["id"], quiet=True)
-            self.ui._after_launch(from_palette)
+            self.ui.after_launch(from_palette)
         except Exception:
             log.exception("запуск набора «%s» failed", rec.get("name"))
-            self.ui._safe_refresh()
+            self.ui.safe_refresh()
 
     def arrange_set(self, set_id, quiet: bool = False):
         rec = self.store.get_set(set_id)
@@ -76,7 +74,7 @@ class SetsController:
             return
         if not W.available():
             if not quiet:
-                self.ui.toast.error("Расставлять окна умеет только Windows-сборка")
+                self.notify.error("Расставлять окна умеет только Windows-сборка")
             return
         area = W.work_area(rec["monitor"])
         fallback = False
@@ -85,7 +83,7 @@ class SetsController:
             fallback = rec["monitor"] != 0
         if area is None:
             if not quiet:
-                self.ui.toast.error("Не удалось прочитать размеры экрана")
+                self.notify.error("Не удалось прочитать размеры экрана")
             return
         snapshot = W.list_windows()
         placed = 0
@@ -107,20 +105,20 @@ class SetsController:
             if W.place(wins[0]["hwnd"], L.to_pixels(rect, area)):
                 placed += 1
         if fallback:
-            self.ui.toast.show(f"Монитора {rec['monitor'] + 1} нет — разложили на основном",
-                               icon=ft.Icons.DESKTOP_WINDOWS, icon_color=C.MUTED)
+            self.notify.show(f"Монитора {rec['monitor'] + 1} нет — разложили на основном",
+                               icon="monitor", tone="muted")
         elif not quiet:
-            self.ui.toast.show(f"Окна расставлены: {placed}" if placed
+            self.notify.show(f"Окна расставлены: {placed}" if placed
                                else "Ни одно окно набора не открыто",
-                               icon=ft.Icons.CROP_FREE, icon_color=C.MUTED)
-        self.ui._safe_refresh()
+                               icon="arrange", tone="muted")
+        self.ui.safe_refresh()
 
     def close_set_windows(self, set_id):
         rec = self.store.get_set(set_id)
         if not rec:
             return
         if not W.available():
-            self.ui.toast.error("Закрывать окна умеет только Windows-сборка")
+            self.notify.error("Закрывать окна умеет только Windows-сборка")
             return
         snapshot = W.list_windows()
         closed = 0
@@ -131,21 +129,21 @@ class SetsController:
             for win in W.windows_for(W.exe_names_for(app), snapshot):
                 if W.close_window(win["hwnd"]):
                     closed += 1
-        self.ui.toast.show(f"Закрыто окон: {closed}" if closed
+        self.notify.show(f"Закрыто окон: {closed}" if closed
                            else "Окон этого набора не нашлось",
-                           icon=ft.Icons.CLOSE, icon_color=C.MUTED)
-        self.ui._safe_refresh()
+                           icon="close", tone="muted")
+        self.ui.safe_refresh()
 
     def capture_set_layout(self, set_id):
         rec = self.store.get_set(set_id)
         if not rec:
             return
         if not W.available():
-            self.ui.toast.error("Читать положение окон умеет только Windows-сборка")
+            self.notify.error("Читать положение окон умеет только Windows-сборка")
             return
         area = W.work_area(rec["monitor"]) or W.work_area(0)
         if area is None:
-            self.ui.toast.error("Не удалось прочитать размеры экрана")
+            self.notify.error("Не удалось прочитать размеры экрана")
             return
         before = [dict(i) for i in rec["items"]]
         snapshot = W.list_windows()
@@ -162,14 +160,14 @@ class SetsController:
                 fresh.update({"rect": None, "slot": None, "minimized": True})
             items.append(fresh)
         if not rects:
-            self.ui.toast.error("Ни одно окно набора не открыто")
+            self.notify.error("Ни одно окно набора не открыто")
             return
         preset, split, vsplit = L.nearest_preset(rects)
         self.store.update_set(set_id, {"items": items,
                                        "layout": {"preset": preset, "split": split,
                                                   "vsplit": vsplit}})
-        self.ui.toast.show(f"Раскладка снята с {len(rects)} {plu_windows(len(rects))}",
-                           icon=ft.Icons.SAVE, icon_color=C.MUTED,
+        self.notify.show(f"Раскладка снята с {len(rects)} {plu_windows(len(rects))}",
+                           icon="save", tone="muted",
                            action=lambda: self.restore_set_items(set_id, before,
                                                                  rec["layout"]),
                            action_label="Вернуть")
@@ -187,14 +185,14 @@ class SetsController:
         if self.ui.view.sel:
             self.make_set(list(self.ui.view.sel))
             return
-        self.ui.toast.show("Выберите плитки — из них и собирается набор",
-                           icon=ft.Icons.LAYERS, icon_color=C.MUTED,
-                           action=self.ui._toggle_select_mode, action_label="Выбрать")
+        self.notify.show("Выберите плитки — из них и собирается набор",
+                           icon="layers", tone="muted",
+                           action=self.ui.toggle_select_mode, action_label="Выбрать")
 
     def make_set(self, ids):
         apps = [a for a in self.ui.apps() if a["id"] in set(ids)]
         if len(apps) < 2:
-            self.ui.toast.error("Для набора нужно хотя бы две программы")
+            self.notify.error("Для набора нужно хотя бы две программы")
             return
         rec = self.store.add_set(queries.set_name_for(apps), [a["id"] for a in apps])
         if not rec:
@@ -202,10 +200,9 @@ class SetsController:
         self.ui.view.clear_selection()
         self.ui.view.select_mode = False
         self.ui.view.open_set(rec["id"])
-        self.ui.toast.show(f"Набор «{rec['name']}» собран", icon=ft.Icons.LAYERS,
-                           icon_color=C.MUTED,
+        self.notify.show(f"Набор «{rec['name']}» собран", icon="layers", tone="muted",
                            action=lambda: self.undo_set(rec["id"]), action_label="Вернуть")
-        self.ui._on_library_changed()
+        self.ui.on_library_changed()
 
     def add_to_set(self, set_id, app_ids):
         rec = self.store.get_set(set_id)
@@ -214,12 +211,10 @@ class SetsController:
         before = list(rec["apps"])
         merged = before + [i for i in app_ids if i not in before]
         if merged == before:
-            self.ui.toast.show(f"Уже в наборе «{rec['name']}»", icon=ft.Icons.LAYERS,
-                               icon_color=C.MUTED)
+            self.notify.show(f"Уже в наборе «{rec['name']}»", icon="layers", tone="muted")
             return
         self.store.update_set(set_id, {"apps": merged})
-        self.ui.toast.show(f"Добавлено в «{rec['name']}»", icon=ft.Icons.LAYERS,
-                           icon_color=C.MUTED,
+        self.notify.show(f"Добавлено в «{rec['name']}»", icon="layers", tone="muted",
                            action=lambda: self.restore_set_members(set_id, before),
                            action_label="Вернуть")
         self.ui.refresh()
@@ -236,7 +231,7 @@ class SetsController:
             self.remove_set(set_id)
             return
         self.store.update_set(set_id, {"items": rest})
-        self.ui.toast.show("Убрано из набора", icon=ft.Icons.LAYERS, icon_color=C.MUTED,
+        self.notify.show("Убрано из набора", icon="layers", tone="muted",
                            action=lambda: self.restore_set_items(set_id, before,
                                                                  rec["layout"]),
                            action_label="Вернуть")
@@ -249,7 +244,7 @@ class SetsController:
     def undo_set(self, set_id):
         self.store.remove_set(set_id)
         self.ui.view.close_set()
-        self.ui._on_library_changed()
+        self.ui.on_library_changed()
 
     def remove_set(self, set_id):
         rec = self.store.remove_set(set_id)
@@ -257,19 +252,18 @@ class SetsController:
             return
         if self.ui.view.active_set == set_id:
             self.ui.view.close_set()
-        self.ui.toast.show(f"Набор «{rec['name']}» удалён", icon=ft.Icons.DELETE_OUTLINE,
-                           icon_color=C.MUTED,
+        self.notify.show(f"Набор «{rec['name']}» удалён", icon="delete", tone="muted",
                            action=lambda: self.restore_set(rec), action_label="Вернуть")
-        self.ui._on_library_changed()
+        self.ui.on_library_changed()
 
     def restore_set(self, rec):
         self.store.restore_set(rec)
-        self.ui._on_library_changed()
+        self.ui.on_library_changed()
 
     def rename_set(self, set_id, name):
         if (name or "").strip():
             self.store.update_set(set_id, {"name": name.strip()})
-            self.ui._on_library_changed()
+            self.ui.on_library_changed()
 
     def set_layout_preset(self, set_id, preset):
         self.store.update_set(set_id, {"layout": {"preset": preset}})

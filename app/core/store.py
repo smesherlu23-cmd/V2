@@ -9,9 +9,9 @@ import time
 import uuid
 from pathlib import Path
 
-from . import layout as L
-from ..infra import log
+from ..infra import log, paths
 from ..infra.debounce import Debounce
+from . import layout as L
 
 DEFAULT_CATEGORIES = [
     {"id": "work", "name": "Работа", "icon": "work", "color": "#ffffff", "order": 0},
@@ -43,10 +43,10 @@ DEFAULT_SETTINGS = {
     "win_max": False,
     "icon_schema": 0,
     "launch_hotkey": DEFAULT_LAUNCH_HOTKEY,
-    "hide_after": True,     
-    "triage": True,          
-    "calm": False,           
-    "hints": True,          
+    "hide_after": True,
+    "triage": True,
+    "calm": False,
+    "hints": True,
     "debug_log": False,
     "onboarded": False,
     "collapsed": [],
@@ -235,11 +235,11 @@ def _clean_settings(raw) -> dict:
 
 DATA_FILENAME = "centurio-data.json"
 PERSIST_DEBOUNCE_DELAY = 1.5
+SCHEMA_VERSION = 3
 
 
 def default_data_path() -> Path:
-    base = Path(os.environ.get("APPDATA") or Path.home())
-    return base / "Centurio" / DATA_FILENAME
+    return paths.data_dir() / DATA_FILENAME
 
 
 class Store:
@@ -248,6 +248,7 @@ class Store:
         self._lock = threading.RLock()
         self.on_error = None
         self.write_error: str | None = None
+        self.newer_version: int | None = None
         self._persist_debounce = Debounce(PERSIST_DEBOUNCE_DELAY, self._debounced_persist)
         self.data = self._load()
 
@@ -257,7 +258,7 @@ class Store:
 
     def _defaults(self) -> dict:
         return {
-            "version": 3,
+            "version": SCHEMA_VERSION,
             "categories": copy.deepcopy(DEFAULT_CATEGORIES),
             "apps": [],
             "sets": [],
@@ -267,7 +268,7 @@ class Store:
 
     def _load(self) -> dict:
         try:
-            with open(self.path, "r", encoding="utf-8") as fh:
+            with open(self.path, encoding="utf-8") as fh:
                 raw = fh.read()
         except FileNotFoundError:
             return self._defaults()
@@ -281,6 +282,18 @@ class Store:
             log.exception("файл данных поврежден, помещение копии в карантин: %s", self.path)
             self._quarantine_corrupt(raw)
             return self._defaults()
+        if not isinstance(parsed, dict):
+            log.warning("файл данных не является объектом, помещение копии в карантин: %s",
+                       self.path)
+            self._quarantine_corrupt(raw)
+            return self._defaults()
+
+        version = parsed.get("version")
+        if isinstance(version, int) and not isinstance(version, bool) and version > SCHEMA_VERSION:
+            log.warning("файл данных версии %s новее, чем понимает эта сборка (%s): %s",
+                       version, SCHEMA_VERSION, self.path)
+            self._backup_newer_version(raw, version)
+            self.newer_version = version
 
         return self._sanitize(parsed)
 
@@ -296,7 +309,7 @@ class Store:
         inbox = [i for i in _clean_records(parsed.get("inbox"), _clean_inbox)
                  if i["path"].lower() not in have]
         return {
-            "version": 3,
+            "version": SCHEMA_VERSION,
             "categories": cats or copy.deepcopy(DEFAULT_CATEGORIES),
             "apps": apps,
             "sets": [s for s in sets if s["items"]],
@@ -311,6 +324,15 @@ class Store:
             dest.write_text(raw, encoding="utf-8")
         except OSError:
             log.exception("не удалось сохранить копию поврежденного файла данных: %s", dest)
+
+    def _backup_newer_version(self, raw: str, version: int) -> None:
+        dest = self.path.with_name(f"centurio-data.v{version}.json")
+        if dest.exists():
+            return
+        try:
+            dest.write_text(raw, encoding="utf-8")
+        except OSError:
+            log.exception("не удалось сохранить копию файла данных версии %s: %s", version, dest)
 
     def _persist(self) -> bool:
         tmp = None
@@ -349,43 +371,66 @@ class Store:
         with self._lock:
             return copy.deepcopy(self.data)
 
+    def settings(self) -> dict:
+        with self._lock:
+            return dict(self.data["settings"])
+
+    def _new_app_record(self, app: dict) -> dict:
+        cats = self.data["categories"]
+        return {
+            "id": str(uuid.uuid4()),
+            "name": app.get("name") or "Без названия",
+            "path": app.get("path") or "",
+            "args": app.get("args") or [],
+            "working_dir": app.get("working_dir") or "",
+            "run_as_admin": bool(app.get("run_as_admin")),
+            "sub": app.get("sub") or "",
+            "category_id": app.get("category_id") or (cats[0]["id"] if cats else "work"),
+            "hue": app["hue"] if isinstance(app.get("hue"), int) else hue_from_string(app.get("name") or app.get("path") or ""),
+            "icon": app.get("icon") or None,
+            "icon_fit": app.get("icon_fit") or "contain",
+            "poster": app.get("poster") or None,
+            "favorite": bool(app.get("favorite")),
+            "quick": bool(app.get("quick")),
+            "hidden": bool(app.get("hidden")),
+            "hotkey": app.get("hotkey") or None,
+            "track_exe": app.get("track_exe") or None,
+            "order": app["order"] if isinstance(app.get("order"), int) else len(self.data["apps"]),
+            "last_launched": 0,
+            "launch_count": 0,
+            "added_at": int(time.time() * 1000),
+        }
+
     def add_app(self, app: dict) -> dict:
         with self._lock:
-            cats = self.data["categories"]
-            record = {
-                "id": str(uuid.uuid4()),
-                "name": app.get("name") or "Без названия",
-                "path": app.get("path") or "",
-                "args": app.get("args") or [],
-                "working_dir": app.get("working_dir") or "",
-                "run_as_admin": bool(app.get("run_as_admin")),
-                "sub": app.get("sub") or "",
-                "category_id": app.get("category_id") or (cats[0]["id"] if cats else "work"),
-                "hue": app["hue"] if isinstance(app.get("hue"), int) else hue_from_string(app.get("name") or app.get("path") or ""),
-                "icon": app.get("icon") or None,
-                "icon_fit": app.get("icon_fit") or "contain",
-                "poster": app.get("poster") or None,
-                "favorite": bool(app.get("favorite")),
-                "quick": bool(app.get("quick")),
-                "hidden": bool(app.get("hidden")),
-                "hotkey": app.get("hotkey") or None,
-                "track_exe": app.get("track_exe") or None,
-                "order": app["order"] if isinstance(app.get("order"), int) else len(self.data["apps"]),
-                "last_launched": 0,
-                "launch_count": 0,
-                "added_at": int(time.time() * 1000),
-            }
+            record = self._new_app_record(app)
             self.data["apps"].append(record)
             self._persist()
-            return record
+            return copy.deepcopy(record)
+
+    def add_apps(self, apps) -> list[dict]:
+        with self._lock:
+            records = []
+            for app in apps:
+                record = self._new_app_record(app)
+                self.data["apps"].append(record)
+                records.append(record)
+            if not records:
+                return []
+            self._persist()
+            return copy.deepcopy(records)
+
+    def _app_ref(self, app_id: str) -> dict | None:
+        return next((a for a in self.data["apps"] if a["id"] == app_id), None)
 
     def get_app(self, app_id: str) -> dict | None:
         with self._lock:
-            return next((a for a in self.data["apps"] if a["id"] == app_id), None)
+            app = self._app_ref(app_id)
+            return copy.deepcopy(app) if app is not None else None
 
     def update_app(self, app_id: str, patch: dict, persist: bool = True) -> dict | None:
         with self._lock:
-            app = self.get_app(app_id)
+            app = self._app_ref(app_id)
             if not app:
                 return None
             for key in ("name", "path", "args", "working_dir", "run_as_admin", "sub", "category_id",
@@ -395,7 +440,7 @@ class Store:
                     app[key] = patch[key]
             if persist:
                 self._persist()
-            return app
+            return copy.deepcopy(app)
 
     def update_apps(self, app_ids, patch: dict) -> int:
         with self._lock:
@@ -445,13 +490,13 @@ class Store:
 
     def mark_launched(self, app_id: str) -> dict | None:
         with self._lock:
-            app = self.get_app(app_id)
+            app = self._app_ref(app_id)
             if not app:
                 return None
             app["last_launched"] = int(time.time() * 1000)
             app["launch_count"] = app.get("launch_count", 0) + 1
             self._persist_debounce.schedule()
-            return app
+            return copy.deepcopy(app)
 
     def add_category(self, name: str, icon: str | None = None, color: str | None = None) -> dict:
         with self._lock:
@@ -778,7 +823,7 @@ class Store:
 
     def import_data(self, src: str | Path, merge: bool = False) -> bool:
         try:
-            with open(src, "r", encoding="utf-8") as fh:
+            with open(src, encoding="utf-8") as fh:
                 incoming = json.load(fh)
         except (OSError, json.JSONDecodeError):
             return False

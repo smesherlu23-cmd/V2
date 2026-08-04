@@ -54,7 +54,7 @@ def list_windows() -> list[dict]:
         try:
             if not user32.IsWindowVisible(hwnd):
                 return True
-            if user32.GetWindow(hwnd, 4):      
+            if user32.GetWindow(hwnd, 4):
                 return True
             length = user32.GetWindowTextLengthW(hwnd)
             if length <= 0:
@@ -176,7 +176,7 @@ def monitors() -> list[tuple[int, int, int, int]]:
             info.cbSize = ctypes.sizeof(MONITORINFO)
             if user32.GetMonitorInfoW(handle, ctypes.byref(info)):
                 work = info.rcWork
-                out.append((bool(info.dwFlags & 1),         
+                out.append((bool(info.dwFlags & 1),
                             (work.left, work.top, work.right - work.left,
                              work.bottom - work.top)))
         except Exception:

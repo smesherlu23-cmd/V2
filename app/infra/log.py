@@ -6,6 +6,8 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from . import paths
+
 _LOGGER = logging.getLogger("centurio")
 _LOGGER.addHandler(logging.NullHandler())
 _configured = False
@@ -16,8 +18,7 @@ def is_debug() -> bool:
 
 
 def _default_dir() -> Path:
-    from ..core.store import default_data_path
-    return default_data_path().parent
+    return paths.data_dir()
 
 
 def setup(debug: bool | None = None, log_dir: str | Path | None = None) -> logging.Logger:
