@@ -148,6 +148,8 @@ class HotkeyManager:
             except Exception:
                 pass
             self._listener = None
+        self.available = False
+        self.bound = set()
 
 
 QUICK_SLOTS = 9

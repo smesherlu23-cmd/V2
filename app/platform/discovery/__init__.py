@@ -27,6 +27,7 @@ from .steam_paths import (  # noqa: F401
     _STEAM_SKIP_ID,
     _steam_game_exe,
     _steam_games,
+    _steam_roots,
     _vdf_val,
     reset_steam_exe_cache,
     steam_exe_for,
@@ -41,6 +42,7 @@ from .windows import (  # noqa: F401
 
 __all__ = [
     "ICON_SCHEMA",
+    "_steam_roots",
     "autostart_names",
     "backfill_icons",
     "desktop_names",
