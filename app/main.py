@@ -167,7 +167,7 @@ def main(page: ft.Page):
             return
         kind, target = split_binding(binding_id)
         if kind == "set":
-            ui._launch_set(target)
+            ui.set_ops.launch_set(target)
         else:
             ui._launch(target)
 
@@ -192,7 +192,7 @@ def main(page: ft.Page):
     }
 
     def tray_menu():
-        from app import dialogs
+        from app.ui import dialogs
         items = [(item["label"], (lambda aid=item["id"]: on_hotkey(aid)))
                  for item in dialogs.tray_items(store)]
         return items, dialogs.library_summary(store)
@@ -217,7 +217,7 @@ def main(page: ft.Page):
             if e.alt:
                 set_id = set_for_accel(_ordered_sets(state), accel)
                 if set_id:
-                    ui._launch_set(set_id)
+                    ui.set_ops.launch_set(set_id)
                 return
             app_id = app_for_accel(state["apps"], accel)
             if app_id:
@@ -266,7 +266,7 @@ def main(page: ft.Page):
 
     def _backfill():
         try:
-            from app import discovery
+            from app.platform import discovery
             cache = str(app_paths_dir(store))
             schema = store.state()["settings"].get("icon_schema", 0)
             refresh = schema < discovery.ICON_SCHEMA
@@ -285,7 +285,7 @@ def main(page: ft.Page):
             time.sleep(AUTO_RESCAN_INTERVAL)
             try:
                 if store.state()["settings"].get("auto_rescan"):
-                    ui.rescan(silent=True)
+                    ui.scan.rescan(silent=True)
             except Exception:
                 log.exception("ошибка автоматической повторной проверки галочки")
     threading.Thread(target=_auto_rescan_loop, daemon=True).start()
