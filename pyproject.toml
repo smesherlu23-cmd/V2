@@ -38,4 +38,3 @@ build_number = 1
 
 [tool.flet.app]
 path = "."
-
