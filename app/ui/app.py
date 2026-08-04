@@ -52,6 +52,9 @@ class CenturioUI:
         self._win_snapshot: list[dict] = []
         self._win_at = 0.0
         self._palette_count = 0
+        self._tile_cache: dict[str, tuple] = {}
+        self._tile_epoch: tuple = ()
+        self._cat_index: dict[str, dict] = {}
 
         self.toast = ToastHost(page)
         self.menu = MenuHost(page, on_dismiss=self._on_menu_dismissed)
@@ -225,6 +228,17 @@ class CenturioUI:
             self._settings = self._snapshot["settings"]
             self._accels = quick_accels(self._snapshot["apps"])
             self._set_accels = set_accels(self.sets())
+            self._cat_index = {c["id"]: c for c in self._snapshot["categories"]}
+            self._tile_epoch = (
+                self._settings.get("tile_size"),
+                bool(self._settings.get("calm")),
+                self._settings.get("accent", C.ACCENT),
+                bool(self._settings.get("game_posters", True)),
+                self.view.select_mode,
+                self.view.mode,
+            )
+            live = {a["id"] for a in self._snapshot["apps"]}
+            self._tile_cache = {k: v for k, v in self._tile_cache.items() if k in live}
             try:
                 self.view.drop_missing(a["id"] for a in self._snapshot["apps"])
                 if self.view.active_set and not any(
@@ -279,6 +293,10 @@ class CenturioUI:
 
     def cat_of(self, app) -> dict | None:
         cid = app.get("category_id")
+        if not cid:
+            return None
+        if self._snapshot is not None and self._cat_index:
+            return self._cat_index.get(cid)
         return next((c for c in self.categories() if c["id"] == cid), None)
 
     def icon_slot(self, app, size: int, radius: int, glyph: int | None = None,
@@ -843,22 +861,44 @@ class CenturioUI:
                     and is_launcher_art(a) and img_b64(a.get("poster")))
 
     def _grid(self, apps):
-        tiles = [self._draggable_tile(a, apps) for a in apps]
+        ids = [a["id"] for a in apps]
+        ids_key = hash(tuple(ids))
+        tiles = [self._draggable_tile(a, ids, ids_key) for a in apps]
         return ft.Container(ft.Row(tiles, wrap=True, spacing=12, run_spacing=12,
                                    vertical_alignment=ft.CrossAxisAlignment.START),
                             padding=ft.padding.only(0, 0, 0, 18))
 
-    def _draggable_tile(self, a, section_apps):
+    def _tile_signature(self, a, ids_key, running, selected, picked, cat):
+        return (self._tile_epoch, ids_key, running, selected, picked,
+                self._accels.get(a["id"]),
+                tuple(self.view.sel) if picked else None,
+                self.window_count(a) if running else 0,
+                a.get("name"), a.get("path"), a.get("sub"), a.get("source"),
+                a.get("icon"), a.get("icon_fit"), a.get("poster"),
+                a.get("category_id"), bool(a.get("favorite")),
+                bool(a.get("hidden")), bool(a.get("quick")),
+                a.get("last_launched"),
+                (cat.get("name"), cat.get("icon"), cat.get("color"), cat.get("image"))
+                if cat else None)
+
+    def _draggable_tile(self, a, ids, ids_key):
+        app_id = a["id"]
+        running = app_id in self.running
+        picked = app_id in self.view.sel
+        selected = picked or (not self.view.select_mode and app_id == self._sel_id)
+        cat = self.cat_of(a)
+        sig = self._tile_signature(a, ids_key, running, selected, picked, cat)
+        hit = self._tile_cache.get(app_id)
+        if hit is not None and hit[0] == sig:
+            return hit[1]
         compact = self._settings.get("tile_size") == "compact"
-        running = a["id"] in self.running
-        picked = a["id"] in self.view.sel
-        selected = picked or (not self.view.select_mode and a["id"] == self._sel_id)
-        ids = [x["id"] for x in section_apps]
         base = (self._build_poster_tile(a, compact, running, selected, ids)
                 if self._use_poster(a) else
                 self._build_tile(a, compact, running, selected, ids))
-        return ft.Draggable(group="apps", content=base,
-                            data={"ids": self._drag_ids(a["id"])})
+        tile = ft.Draggable(group="apps", content=base,
+                            data={"ids": self._drag_ids(app_id)})
+        self._tile_cache[app_id] = (sig, tile)
+        return tile
 
     def _tile_meta(self, app, cat) -> str:
         if self.calm():
@@ -975,14 +1015,20 @@ class CenturioUI:
             on_secondary_tap_down=lambda e, ap=a: self._app_menu(ap, e))
 
     def _list(self, apps):
-        rows = [self._list_row(a, [x["id"] for x in apps]) for a in apps]
+        ids = [a["id"] for a in apps]
+        ids_key = hash(tuple(ids))
+        rows = [self._list_row(a, ids, ids_key) for a in apps]
         return ft.Container(ft.Column(rows, spacing=6), padding=ft.padding.only(0, 0, 0, 18))
 
-    def _list_row(self, a, ids):
+    def _list_row(self, a, ids, ids_key):
         running = a["id"] in self.running
         picked = a["id"] in self.view.sel
         selected = picked or (not self.view.select_mode and a["id"] == self._sel_id)
         cat = self.cat_of(a)
+        sig = self._tile_signature(a, ids_key, running, selected, picked, cat)
+        hit = self._tile_cache.get(a["id"])
+        if hit is not None and hit[0] == sig:
+            return hit[1]
         lines = [T(a["name"], size=13, weight=ft.FontWeight.W_600, color=C.TEXT)]
         meta = self._tile_meta(a, cat)
         if meta:
@@ -1013,9 +1059,11 @@ class CenturioUI:
                            bgcolor=C.SELECTED_BG if selected else C.PANEL)
         if not selected:
             Wg.hoverable(row, C.PANEL, C.SELECTED_BG)
-        return ft.GestureDetector(row,
-                                  on_tap_down=lambda e, i=a["id"]: self._tile_tap(i, ids, e),
-                                  on_secondary_tap_down=lambda e, ap=a: self._app_menu(ap, e))
+        built = ft.GestureDetector(row,
+                                   on_tap_down=lambda e, i=a["id"]: self._tile_tap(i, ids, e),
+                                   on_secondary_tap_down=lambda e, ap=a: self._app_menu(ap, e))
+        self._tile_cache[a["id"]] = (sig, built)
+        return built
 
     def _empty(self, title, text, btn_label, on_click):
         controls = [

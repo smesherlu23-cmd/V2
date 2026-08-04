@@ -1866,6 +1866,67 @@ def test_ui_matches_the_design_sizes():
         ok(_sized(board, None, 44), "and «Добавить программу» is 44")
 
 
+def test_ui_tile_cache():
+    """Плитки переиспользуются, пока их вид не изменился."""
+    try:
+        from app.ui.app import CenturioUI  # noqa: F401
+    except Exception as exc:
+        skip("UI tile cache test", exc)
+        return
+
+    with tempfile.TemporaryDirectory() as d:
+        store = Store(os.path.join(d, "data.json"))
+        cats = [c["id"] for c in store.state()["categories"]]
+        for i in range(8):
+            store.add_app({"name": f"App {i}", "path": f"/bin/app{i}",
+                           "category_id": cats[i % len(cats)]})
+        ui, _ = _ui_for(store)
+        target = store.state()["apps"][0]
+        tid = target["id"]
+
+        def tile():
+            return ui._tile_cache[tid][1]
+
+        before = tile()
+        ui.refresh()
+        ok(tile() is before, "an unchanged tile is reused, not rebuilt")
+
+        cached = len(ui._tile_cache)
+        ok(cached == 8, "every visible app lands in the cache")
+
+        def rebuilds(label, change):
+            was = tile()
+            change()
+            ui.refresh()
+            ok(tile() is not was, label)
+
+        rebuilds("renaming rebuilds the tile",
+                 lambda: store.update_app(tid, {"name": "Renamed"}))
+        rebuilds("favouriting rebuilds the tile",
+                 lambda: store.update_app(tid, {"favorite": True}))
+        rebuilds("a new icon rebuilds the tile",
+                 lambda: store.update_app(tid, {"icon": "/tmp/whatever.png"}))
+        rebuilds("launching rebuilds the tile",
+                 lambda: setattr(ui, "running", {tid}))
+        rebuilds("selecting rebuilds the tile",
+                 lambda: ui.view.select_one(tid))
+        rebuilds("select mode rebuilds the tile",
+                 lambda: ui.view.enter_select_mode())
+        rebuilds("the tile size setting rebuilds every tile",
+                 lambda: store.set_setting("tile_size", "compact"))
+        rebuilds("switching to list mode rebuilds the row",
+                 lambda: ui.view.set_mode("list"))
+        rebuilds("renaming its category rebuilds the tile",
+                 lambda: store.update_category(store.get_app(tid)["category_id"],
+                                               {"name": "Другое имя"}))
+
+        gone = [a["id"] for a in store.state()["apps"] if a["id"] != tid]
+        store.remove_apps(gone)
+        ui.refresh()
+        ok(set(ui._tile_cache) == {tid},
+           "tiles of removed apps are dropped from the cache")
+
+
 def test_ui_inbox_badge_and_triage():
     """Разбор: значок со счётчиком, очередь по одной, четыре клавиши."""
     try:
@@ -3369,6 +3430,7 @@ if __name__ == "__main__":
     test_ui_text_stays_inside_the_bundled_fonts()
     test_ui_single_screen_layout()
     test_ui_matches_the_design_sizes()
+    test_ui_tile_cache()
     test_ui_inbox_badge_and_triage()
     test_ui_context_menus()
     test_ui_inspector_replaces_the_modal_form()
