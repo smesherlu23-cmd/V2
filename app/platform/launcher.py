@@ -8,7 +8,7 @@ import subprocess
 import threading
 from pathlib import Path
 
-from ..infra import log
+from ..infra import log, procs
 
 _EXE_EXTS = {".exe", ".bat", ".cmd", ".com"}
 _DETACHED_PROCESS = 0x00000008
@@ -73,14 +73,9 @@ class Launcher:
             self._monitor_stop = stop
 
         def loop():
-            import psutil
             while not stop.is_set():
                 try:
-                    names = set()
-                    for p in psutil.process_iter(["name"]):
-                        n = p.info.get("name")
-                        if n:
-                            names.add(n.lower())
+                    names = set(procs.snapshot().values())
                     with self._lock:
                         matched = set()
                         for base, ids in self._exe_index.items():
