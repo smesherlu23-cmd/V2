@@ -1,0 +1,25 @@
+[project]
+name = "centurio"
+version = "1.0.0"
+description = "Centurio — персональная, всегда доступная из трея горячая панель приложений."
+readme = "README.md"
+requires-python = ">=3.9"
+
+dependencies = [
+    "flet[desktop]==0.28.3",
+    "pystray>=0.19.5",
+    "Pillow>=10.0.0",
+    "pynput>=1.7.6",
+    "psutil>=5.9.0",
+]
+
+[tool.flet]
+org = "com.centurio"
+product = "Centurio"
+company = "Centurio"
+copyright = "."
+build_version = "1.0.0"
+build_number = 1
+
+[tool.flet.app]
+path = "."
