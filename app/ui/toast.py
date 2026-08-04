@@ -170,13 +170,6 @@ NOTE_TONES = {"muted": C.MUTED, "good": C.GREEN}
 
 
 class Notifier:
-    """Тосты по именам, а не по объектам Flet.
-
-    Позволяет контроллерам сообщать о результате, не импортируя ни flet,
-    ни палитру: имя значка и тон переводятся в объекты здесь, в слое
-    представления.
-    """
-
     def __init__(self, toast: ToastHost):
         self.toast = toast
 

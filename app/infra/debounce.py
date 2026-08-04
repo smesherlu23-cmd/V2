@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import threading
 
-
 class Debounce:
     def __init__(self, delay: float, fn):
         self.delay = delay
