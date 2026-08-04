@@ -349,6 +349,10 @@ class Store:
         with self._lock:
             return copy.deepcopy(self.data)
 
+    def settings(self) -> dict:
+        with self._lock:
+            return dict(self.data["settings"])
+
     def add_app(self, app: dict) -> dict:
         with self._lock:
             cats = self.data["categories"]

@@ -3,6 +3,7 @@ from __future__ import annotations
 import shlex
 import threading
 import time
+from collections import OrderedDict
 from pathlib import Path
 
 import flet as ft
@@ -32,6 +33,7 @@ from ..platform import windows as W
 WINDOW_TTL = 2.0
 HEADER_SIDES_W = 320
 QUICK_H = 88
+TILE_CACHE_MAX = 600
 
 class CenturioUI:
     def __init__(self, page: ft.Page, store: Store, launcher, controllers=None):
@@ -52,9 +54,12 @@ class CenturioUI:
         self._win_snapshot: list[dict] = []
         self._win_at = 0.0
         self._palette_count = 0
-        self._tile_cache: dict[str, tuple] = {}
+        self._tile_cache: OrderedDict[str, tuple] = OrderedDict()
+        self._tiles_used: set[str] = set()
         self._tile_epoch: tuple = ()
         self._cat_index: dict[str, dict] = {}
+        self._visible = True
+        self._dirty = False
 
         self.toast = ToastHost(page)
         self.menu = MenuHost(page, on_dismiss=self._on_menu_dismissed)
@@ -223,6 +228,10 @@ class CenturioUI:
             log.exception("сбой при обновлении интерфейса после изменения запущенных приложений")
 
     def refresh(self, content_only=False):
+        if not self._visible:
+            self._dirty = True
+            self._settings = self.store.settings()
+            return
         with self._refresh_lock:
             self._snapshot = self.store.state()
             self._settings = self._snapshot["settings"]
@@ -238,12 +247,15 @@ class CenturioUI:
                 self.view.mode,
             )
             live = {a["id"] for a in self._snapshot["apps"]}
-            self._tile_cache = {k: v for k, v in self._tile_cache.items() if k in live}
+            self._tile_cache = OrderedDict(
+                (k, v) for k, v in self._tile_cache.items() if k in live)
+            self._tiles_used = set()
             try:
                 self.view.drop_missing(a["id"] for a in self._snapshot["apps"])
                 if self.view.active_set and not any(
                         s["id"] == self.view.active_set for s in self._snapshot["sets"]):
                     self.view.close_set()
+                self._dirty = False
                 self._refresh_library(content_only)
                 self.body.content = self.library_body
                 self._render_palette()
@@ -251,9 +263,20 @@ class CenturioUI:
                 self._sync_search_box(self._palette_count)
                 self._render_popover()
                 self._render_onboarding()
+                self._trim_tile_cache()
             finally:
                 self._snapshot = None
             self.page.update()
+
+    def _trim_tile_cache(self):
+        cap = max(TILE_CACHE_MAX, len(self._tiles_used))
+        if len(self._tile_cache) <= cap:
+            return
+        for app_id in list(self._tile_cache):
+            if len(self._tile_cache) <= cap:
+                break
+            if app_id not in self._tiles_used:
+                del self._tile_cache[app_id]
 
     def _refresh_library(self, content_only: bool):
         if not content_only:
@@ -278,7 +301,18 @@ class CenturioUI:
         self.inspector_overlay.visible = floating
         self.inspector_overlay.content = inspector if floating else None
 
+    def set_visible(self, visible: bool):
+        visible = bool(visible)
+        if visible == self._visible:
+            return
+        self._visible = visible
+        if visible and self._dirty:
+            self.refresh()
+
     def _refresh_palette_only(self):
+        if not self._visible:
+            self._dirty = True
+            return
         with self._refresh_lock:
             self._snapshot = self.store.state()
             try:
@@ -888,8 +922,10 @@ class CenturioUI:
         selected = picked or (not self.view.select_mode and app_id == self._sel_id)
         cat = self.cat_of(a)
         sig = self._tile_signature(a, ids_key, running, selected, picked, cat)
+        self._tiles_used.add(app_id)
         hit = self._tile_cache.get(app_id)
         if hit is not None and hit[0] == sig:
+            self._tile_cache.move_to_end(app_id)
             return hit[1]
         compact = self._settings.get("tile_size") == "compact"
         base = (self._build_poster_tile(a, compact, running, selected, ids)
@@ -898,6 +934,7 @@ class CenturioUI:
         tile = ft.Draggable(group="apps", content=base,
                             data={"ids": self._drag_ids(app_id)})
         self._tile_cache[app_id] = (sig, tile)
+        self._tile_cache.move_to_end(app_id)
         return tile
 
     def _tile_meta(self, app, cat) -> str:
@@ -1026,8 +1063,10 @@ class CenturioUI:
         selected = picked or (not self.view.select_mode and a["id"] == self._sel_id)
         cat = self.cat_of(a)
         sig = self._tile_signature(a, ids_key, running, selected, picked, cat)
+        self._tiles_used.add(a["id"])
         hit = self._tile_cache.get(a["id"])
         if hit is not None and hit[0] == sig:
+            self._tile_cache.move_to_end(a["id"])
             return hit[1]
         lines = [T(a["name"], size=13, weight=ft.FontWeight.W_600, color=C.TEXT)]
         meta = self._tile_meta(a, cat)
@@ -1063,6 +1102,7 @@ class CenturioUI:
                                    on_tap_down=lambda e, i=a["id"]: self._tile_tap(i, ids, e),
                                    on_secondary_tap_down=lambda e, ap=a: self._app_menu(ap, e))
         self._tile_cache[a["id"]] = (sig, built)
+        self._tile_cache.move_to_end(a["id"])
         return built
 
     def _empty(self, title, text, btn_label, on_click):

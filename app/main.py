@@ -104,15 +104,31 @@ def main(page: ft.Page):
         except Exception:
             log.exception("восстановление геометрии окна ошибка")
 
+    def set_visible(visible: bool):
+        ui = ui_holder.get("ui")
+        if ui is not None:
+            try:
+                ui.set_visible(visible)
+            except Exception:
+                log.exception("не удалось переключить видимость интерфейса")
+
+    def show_window():
+        _show_window(page)
+        set_visible(True)
+
+    def hide_window():
+        _hide_window(page)
+        set_visible(False)
+
     def open_search():
         ui = ui_holder.get("ui")
-        _show_window(page)
+        show_window()
         if ui is not None:
             ui._focus_search()
 
     def open_library():
         ui = ui_holder.get("ui")
-        _show_window(page)
+        show_window()
         if ui is not None:
             ui.open_library()
 
@@ -131,6 +147,7 @@ def main(page: ft.Page):
             hide_to_tray()
         else:
             page.window.minimized = True
+            set_visible(False)
             page.update()
 
     def toggle_maximize():
@@ -147,9 +164,10 @@ def main(page: ft.Page):
         if is_web:
             return
         if tray.available:
-            _hide_window(page)
+            hide_window()
         else:
             page.window.minimized = True
+            set_visible(False)
             page.update()
 
     def on_setting(key, value):
@@ -256,12 +274,18 @@ def main(page: ft.Page):
     def on_win_event(e):
         if e.data in ("resized", "moved", "maximize", "unmaximize"):
             save_window()
+        elif e.data == "minimize":
+            set_visible(False)
+        elif e.data in ("restore", "focus"):
+            set_visible(True)
         elif e.data == "close":
             save_window(flush=True)
             close()
     page.window.on_event = on_win_event if not is_web else None
 
     apply_window()
+    if start_hidden and not is_web:
+        ui.set_visible(False)
     ui.mount()
 
     def _backfill():
@@ -298,7 +322,7 @@ def main(page: ft.Page):
             ui.refresh()
         tray.start()
         if start_hidden:
-            _hide_window(page)
+            hide_window()
     ui.maybe_onboard()
 
 

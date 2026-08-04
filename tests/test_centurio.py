@@ -1927,6 +1927,44 @@ def test_ui_tile_cache():
            "tiles of removed apps are dropped from the cache")
 
 
+def test_ui_skips_work_while_hidden():
+    """Спрятанное окно не перерисовывается — работа копится до возврата."""
+    try:
+        from app.ui.app import CenturioUI  # noqa: F401
+    except Exception as exc:
+        skip("UI visibility test", exc)
+        return
+
+    with tempfile.TemporaryDirectory() as d:
+        store = Store(os.path.join(d, "data.json"))
+        for i in range(5):
+            store.add_app({"name": f"App {i}", "path": f"/bin/app{i}"})
+        ui, _ = _ui_for(store)
+
+        ui.set_visible(False)
+        ui._tile_cache.clear()
+        ui.refresh()
+        ok(not ui._tile_cache, "a hidden refresh builds no tiles at all")
+        ok(ui._dirty, "it records that a repaint is owed")
+
+        store.add_app({"name": "Added while hidden", "path": "/bin/late"})
+        ui.refresh()
+        ok(not ui._tile_cache, "further hidden refreshes stay free")
+
+        ui.set_visible(True)
+        ok(not ui._dirty, "coming back clears the debt")
+        ok(len(ui._tile_cache) == 6, "and repaints everything once, including the new app")
+
+        before = dict(ui._tile_cache)
+        ui.set_visible(True)
+        ok(dict(ui._tile_cache) == before, "a repeated show does not repaint again")
+
+        ui.set_visible(False)
+        settings = ui.store.settings()
+        ok(isinstance(settings, dict) and "hide_after" in settings,
+           "settings stay readable while hidden, without a full state copy")
+
+
 def test_ui_inbox_badge_and_triage():
     """Разбор: значок со счётчиком, очередь по одной, четыре клавиши."""
     try:
@@ -3431,6 +3469,7 @@ if __name__ == "__main__":
     test_ui_single_screen_layout()
     test_ui_matches_the_design_sizes()
     test_ui_tile_cache()
+    test_ui_skips_work_while_hidden()
     test_ui_inbox_badge_and_triage()
     test_ui_context_menus()
     test_ui_inspector_replaces_the_modal_form()
