@@ -270,6 +270,6 @@ def _order_row(ui, rec, entry):
     return ft.DragTarget(
         group=group,
         content=ft.Draggable(group=group, content=tapper, data=entry["app_id"]),
-        on_accept=lambda e, r=row: ui.drop_set_item(rec["id"], entry["app_id"], e, r, rest),
-        on_will_accept=lambda e, r=row: ui._highlight_drop(r, True, rest),
-        on_leave=lambda e, r=row: ui._highlight_drop(r, False, rest))
+        on_accept=lambda e, r=row: ui.chrome.drop_set_item(rec["id"], entry["app_id"], e, r, rest),
+        on_will_accept=lambda e, r=row: ui.chrome.highlight_drop(r, True, rest),
+        on_leave=lambda e, r=row: ui.chrome.highlight_drop(r, False, rest))

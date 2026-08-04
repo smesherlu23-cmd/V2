@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
 import os
 import threading
@@ -9,229 +8,10 @@ import time
 import uuid
 from pathlib import Path
 
-from ..infra import log, paths
-from ..infra.debounce import Debounce
-from . import layout as L
-
-DEFAULT_CATEGORIES = [
-    {"id": "work", "name": "Работа", "icon": "work", "color": "#ffffff", "order": 0},
-    {"id": "create", "name": "Творчество", "icon": "brush", "color": "#ffffff", "order": 1},
-    {"id": "games", "name": "Игры", "icon": "sports_esports", "color": "#ffffff", "order": 2},
-    {"id": "dev", "name": "Разработка", "icon": "code", "color": "#ffffff", "order": 3},
-]
-
-DEFAULT_LAUNCH_HOTKEY = "Ctrl+Space"
-DEFAULT_SET_DELAY = 2.0
-MAX_SET_DELAY = 30.0
-
-DEFAULT_SETTINGS = {
-    "autostart": False,
-    "minimize_to_tray": True,
-    "close_to_tray": True,
-    "accent": "#f5f5f7",
-    "tile_size": "large",
-    "show_quick_row": True,
-    "game_posters": True,
-    "auto_rescan": False,
-    "view_filter": "all",
-    "view_sort": "alpha",
-    "view_mode": "grid",
-    "win_w": None,
-    "win_h": None,
-    "win_x": None,
-    "win_y": None,
-    "win_max": False,
-    "icon_schema": 0,
-    "launch_hotkey": DEFAULT_LAUNCH_HOTKEY,
-    "hide_after": True,
-    "triage": True,
-    "calm": False,
-    "hints": True,
-    "debug_log": False,
-    "onboarded": False,
-    "collapsed": [],
-}
-
-
-def hue_from_string(text: str) -> int:
-    digest = hashlib.md5(str(text).lower().encode("utf-8"), usedforsecurity=False).digest()
-    return ((digest[0] << 8) | digest[1]) % 360
-
-
-def _as_int(value, fallback: int = 0) -> int:
-    return value if isinstance(value, int) and not isinstance(value, bool) else fallback
-
-
-def _clean_app(item, index: int) -> dict | None:
-    if not isinstance(item, dict):
-        return None
-    app_id = item.get("id")
-    if not isinstance(app_id, str) or not app_id.strip():
-        return None
-    rec = dict(item)
-    rec["id"] = app_id
-    name = rec.get("name")
-    rec["name"] = name.strip() if isinstance(name, str) and name.strip() else "Без названия"
-    rec["path"] = rec["path"] if isinstance(rec.get("path"), str) else ""
-    rec["order"] = _as_int(rec.get("order"), index)
-    rec["hidden"] = bool(rec.get("hidden"))
-    for key in ("added_at", "last_launched", "launch_count"):
-        rec[key] = _as_int(rec.get(key))
-    hue = _as_int(rec.get("hue"), -1)
-    rec["hue"] = hue if 0 <= hue < 360 else hue_from_string(rec["name"] or rec["path"])
-    return rec
-
-
-def _clean_category(item, index: int) -> dict | None:
-    if not isinstance(item, dict):
-        return None
-    cat_id = item.get("id")
-    if not isinstance(cat_id, str) or not cat_id.strip():
-        return None
-    rec = dict(item)
-    rec["id"] = cat_id
-    name = rec.get("name")
-    rec["name"] = name.strip() if isinstance(name, str) and name.strip() else "Категория"
-    rec["order"] = _as_int(rec.get("order"), index)
-    rec["image"] = rec["image"] if isinstance(rec.get("image"), str) and rec["image"] else None
-    return rec
-
-
-def _clean_layout(raw) -> dict:
-    raw = raw if isinstance(raw, dict) else {}
-    return {"preset": L.valid_preset(raw.get("preset")),
-            "split": L.clamp(raw.get("split", L.DEFAULT_SPLIT), L.MIN_SPLIT, L.MAX_SPLIT),
-            "vsplit": L.clamp(raw.get("vsplit", L.DEFAULT_VSPLIT), L.MIN_SPLIT, L.MAX_SPLIT)}
-
-
-def _clean_item(raw, preset: str, index: int) -> dict | None:
-    if isinstance(raw, str):
-        raw = {"app_id": raw}
-    if not isinstance(raw, dict):
-        return None
-    app_id = raw.get("app_id")
-    if not isinstance(app_id, str) or not app_id:
-        return None
-    count = L.slot_count(preset)
-    if "slot" in raw:
-        slot = raw["slot"]
-        if not isinstance(slot, int) or isinstance(slot, bool) or not 0 <= slot < count:
-            slot = None
-    else:
-        slot = index if index < count else None
-    return {"app_id": app_id, "slot": slot, "minimized": bool(raw.get("minimized")),
-            "rect": list(L.normal_rect(raw.get("rect")) or []) or None}
-
-
-def _clean_set(item, index: int) -> dict | None:
-    if not isinstance(item, dict):
-        return None
-    set_id = item.get("id")
-    if not isinstance(set_id, str) or not set_id.strip():
-        return None
-    rec = dict(item)
-    rec["id"] = set_id
-    name = rec.get("name")
-    rec["name"] = name.strip() if isinstance(name, str) and name.strip() else "Набор"
-    rec["order"] = _as_int(rec.get("order"), index)
-    rec["quick"] = bool(rec.get("quick"))
-    rec["layout"] = _clean_layout(rec.get("layout"))
-    hotkey = rec.get("hotkey")
-    rec["hotkey"] = hotkey.strip() if isinstance(hotkey, str) and hotkey.strip() else None
-    rec["monitor"] = max(0, _as_int(rec.get("monitor")))
-    rec["close_together"] = bool(rec.get("close_together"))
-    delay = rec.get("delay_seconds", DEFAULT_SET_DELAY)
-    try:
-        rec["delay_seconds"] = max(0.0, min(MAX_SET_DELAY, float(delay)))
-    except (TypeError, ValueError):
-        rec["delay_seconds"] = DEFAULT_SET_DELAY
-
-    raw_items = rec.get("items")
-    if not isinstance(raw_items, list):
-        raw_items = rec.get("apps") if isinstance(rec.get("apps"), list) else []
-    preset = rec["layout"]["preset"]
-    items: list[dict] = []
-    seen: set[str] = set()
-    for raw in raw_items:
-        entry = _clean_item(raw, preset, len(items))
-        if entry is None or entry["app_id"] in seen:
-            continue
-        seen.add(entry["app_id"])
-        items.append(entry)
-    rec["items"] = items
-    return _mirror_items(rec)
-
-
-def _mirror_items(rec: dict) -> dict:
-    rec["apps"] = [i["app_id"] for i in rec.get("items", [])]
-    return rec
-
-
-def _fit_slots(rec: dict) -> dict:
-    count = L.slot_count(rec["layout"]["preset"])
-    taken: set[int] = set()
-    for entry in rec["items"]:
-        slot = entry.get("slot")
-        if not isinstance(slot, int) or slot >= count or slot in taken:
-            entry["slot"] = None
-        else:
-            taken.add(slot)
-    return rec
-
-
-def _free_slot(rec: dict):
-    count = L.slot_count(rec["layout"]["preset"])
-    taken = {i.get("slot") for i in rec["items"] if isinstance(i.get("slot"), int)}
-    return next((i for i in range(count) if i not in taken), None)
-
-
-def _refill_slots(rec: dict) -> dict:
-    for entry in rec["items"]:
-        if entry.get("minimized") or entry.get("rect") or entry.get("slot") is not None:
-            continue
-        entry["slot"] = _free_slot(rec)
-        if entry["slot"] is None:
-            break
-    return rec
-
-
-def _clean_inbox(item, index: int) -> dict | None:
-    if not isinstance(item, dict):
-        return None
-    path = item.get("path")
-    if not isinstance(path, str) or not path.strip():
-        return None
-    rec = dict(item)
-    rec["id"] = item["id"] if isinstance(item.get("id"), str) and item["id"] else path.lower()
-    rec["path"] = path.strip()
-    name = rec.get("name")
-    rec["name"] = name.strip() if isinstance(name, str) and name.strip() else "Без названия"
-    rec["source"] = rec["source"] if isinstance(rec.get("source"), str) else ""
-    rec["order"] = _as_int(rec.get("order"), index)
-    rec["found_at"] = _as_int(rec.get("found_at"))
-    return rec
-
-
-def _clean_records(raw, clean) -> list[dict]:
-    out: list[dict] = []
-    seen: set[str] = set()
-    for index, item in enumerate(raw if isinstance(raw, list) else []):
-        rec = clean(item, index)
-        if rec is None or rec["id"] in seen:
-            continue
-        seen.add(rec["id"])
-        out.append(rec)
-    return out
-
-
-def _clean_settings(raw) -> dict:
-    settings = dict(DEFAULT_SETTINGS)
-    if isinstance(raw, dict):
-        for key in DEFAULT_SETTINGS:
-            if key in raw:
-                settings[key] = raw[key]
-    return settings
-
+from ...infra import log, paths
+from ...infra.debounce import Debounce
+from .. import layout as L
+from . import sanitize
 
 DATA_FILENAME = "centurio-data.json"
 PERSIST_DEBOUNCE_DELAY = 1.5
@@ -259,11 +39,11 @@ class Store:
     def _defaults(self) -> dict:
         return {
             "version": SCHEMA_VERSION,
-            "categories": copy.deepcopy(DEFAULT_CATEGORIES),
+            "categories": copy.deepcopy(sanitize.DEFAULT_CATEGORIES),
             "apps": [],
             "sets": [],
             "inbox": [],
-            "settings": dict(DEFAULT_SETTINGS),
+            "settings": dict(sanitize.DEFAULT_SETTINGS),
         }
 
     def _load(self) -> dict:
@@ -298,23 +78,23 @@ class Store:
         return self._sanitize(parsed)
 
     def _sanitize(self, parsed: dict) -> dict:
-        cats = _clean_records(parsed.get("categories"), _clean_category)
-        apps = _clean_records(parsed.get("apps"), _clean_app)
+        cats = sanitize.clean_records(parsed.get("categories"), sanitize.clean_category)
+        apps = sanitize.clean_records(parsed.get("apps"), sanitize.clean_app)
         known = {a["id"] for a in apps}
-        sets = _clean_records(parsed.get("sets"), _clean_set)
+        sets = sanitize.clean_records(parsed.get("sets"), sanitize.clean_set)
         for rec in sets:
             rec["items"] = [i for i in rec["items"] if i["app_id"] in known]
-            _fit_slots(_mirror_items(rec))
+            sanitize.fit_slots(sanitize.mirror_items(rec))
         have = {(a.get("path") or "").lower() for a in apps}
-        inbox = [i for i in _clean_records(parsed.get("inbox"), _clean_inbox)
+        inbox = [i for i in sanitize.clean_records(parsed.get("inbox"), sanitize.clean_inbox)
                  if i["path"].lower() not in have]
         return {
             "version": SCHEMA_VERSION,
-            "categories": cats or copy.deepcopy(DEFAULT_CATEGORIES),
+            "categories": cats or copy.deepcopy(sanitize.DEFAULT_CATEGORIES),
             "apps": apps,
             "sets": [s for s in sets if s["items"]],
             "inbox": inbox,
-            "settings": _clean_settings(parsed.get("settings")),
+            "settings": sanitize.clean_settings(parsed.get("settings")),
         }
 
     def _quarantine_corrupt(self, raw: str) -> None:
@@ -386,7 +166,7 @@ class Store:
             "run_as_admin": bool(app.get("run_as_admin")),
             "sub": app.get("sub") or "",
             "category_id": app.get("category_id") or (cats[0]["id"] if cats else "work"),
-            "hue": app["hue"] if isinstance(app.get("hue"), int) else hue_from_string(app.get("name") or app.get("path") or ""),
+            "hue": app["hue"] if isinstance(app.get("hue"), int) else sanitize.hue_from_string(app.get("name") or app.get("path") or ""),
             "icon": app.get("icon") or None,
             "icon_fit": app.get("icon_fit") or "contain",
             "poster": app.get("poster") or None,
@@ -472,7 +252,7 @@ class Store:
             self.data["apps"] = [a for a in self.data["apps"] if a["id"] not in wanted]
             for rec in self.data["sets"]:
                 rec["items"] = [i for i in rec["items"] if i["app_id"] not in wanted]
-                _mirror_items(rec)
+                sanitize.mirror_items(rec)
             self.data["sets"] = [s for s in self.data["sets"] if s["items"]]
             self._persist()
             return copy.deepcopy(gone)
@@ -578,7 +358,7 @@ class Store:
             members = [aid for aid in dict.fromkeys(app_ids) if aid in known]
             if not members:
                 return None
-            rec = _clean_set({"id": str(uuid.uuid4()),
+            rec = sanitize.clean_set({"id": str(uuid.uuid4()),
                               "name": (name or "").strip() or "Набор",
                               "items": [{"app_id": aid} for aid in members],
                               "quick": bool(quick), "order": len(self.data["sets"])},
@@ -606,12 +386,12 @@ class Store:
                 hk = (patch["hotkey"] or "").strip() if isinstance(patch["hotkey"], str) else ""
                 rec["hotkey"] = hk or None
             if "monitor" in patch:
-                rec["monitor"] = max(0, _as_int(patch["monitor"]))
+                rec["monitor"] = max(0, sanitize.as_int(patch["monitor"]))
             if "close_together" in patch:
                 rec["close_together"] = bool(patch["close_together"])
             if "delay_seconds" in patch:
                 try:
-                    rec["delay_seconds"] = max(0.0, min(MAX_SET_DELAY,
+                    rec["delay_seconds"] = max(0.0, min(sanitize.MAX_SET_DELAY,
                                                         float(patch["delay_seconds"])))
                 except (TypeError, ValueError):
                     pass
@@ -620,13 +400,13 @@ class Store:
                 merged = dict(rec["layout"])
                 merged.update(patch["layout"] if isinstance(patch["layout"], dict) else {})
                 before = rec["layout"]["preset"]
-                rec["layout"] = _clean_layout(merged)
+                rec["layout"] = sanitize.clean_layout(merged)
                 preset_changed = rec["layout"]["preset"] != before
             if "items" in patch:
                 raw = patch["items"] if isinstance(patch["items"], list) else []
                 items = []
                 for entry in raw:
-                    clean = _clean_item(entry, rec["layout"]["preset"], len(items))
+                    clean = sanitize.clean_item(entry, rec["layout"]["preset"], len(items))
                     if clean and clean["app_id"] in known:
                         items.append(clean)
                 rec["items"] = items
@@ -637,11 +417,11 @@ class Store:
                 for aid in wanted:
                     if aid in by_id:
                         continue
-                    rec["items"].append({"app_id": aid, "slot": _free_slot(rec),
+                    rec["items"].append({"app_id": aid, "slot": sanitize.free_slot(rec),
                                          "minimized": False, "rect": None})
-            _fit_slots(_mirror_items(rec))
+            sanitize.fit_slots(sanitize.mirror_items(rec))
             if preset_changed:
-                _refill_slots(rec)
+                sanitize.refill_slots(rec)
             self._persist()
             return copy.deepcopy(rec)
 
@@ -682,7 +462,7 @@ class Store:
             order = [aid for aid in dict.fromkeys(ordered_ids) if aid in by_id]
             rec["items"] = ([by_id[aid] for aid in order]
                             + [i for i in rec["items"] if i["app_id"] not in set(order)])
-            _mirror_items(rec)
+            sanitize.mirror_items(rec)
             self._persist()
             return copy.deepcopy(rec)
 
@@ -699,7 +479,7 @@ class Store:
             if i == j:
                 return copy.deepcopy(rec)
             rec["items"].insert(j, rec["items"].pop(i))
-            _mirror_items(rec)
+            sanitize.mirror_items(rec)
             self._persist()
             return copy.deepcopy(rec)
 
@@ -726,14 +506,14 @@ class Store:
         with self._lock:
             if any(s["id"] == record["id"] for s in self.data["sets"]):
                 return False
-            rec = _clean_set(copy.deepcopy(record), len(self.data["sets"]))
+            rec = sanitize.clean_set(copy.deepcopy(record), len(self.data["sets"]))
             if rec is None:
                 return False
             known = {a["id"] for a in self.data["apps"]}
             rec["items"] = [i for i in rec["items"] if i["app_id"] in known]
             if not rec["items"]:
                 return False
-            self.data["sets"].append(_mirror_items(rec))
+            self.data["sets"].append(sanitize.mirror_items(rec))
             self.data["sets"].sort(key=lambda s: s.get("order", 0))
             self._persist()
             return True
@@ -796,7 +576,7 @@ class Store:
 
     def set_setting(self, key: str, value, persist: bool | str = True) -> dict:
         with self._lock:
-            if key in DEFAULT_SETTINGS:
+            if key in sanitize.DEFAULT_SETTINGS:
                 self.data["settings"][key] = value
                 if persist == "debounce":
                     self._persist_debounce.schedule()
