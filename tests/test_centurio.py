@@ -544,6 +544,96 @@ def test_store_load_validation():
         ok(True, "every sort order works on the sanitised records")
 
 
+def test_store_get_app_returns_a_copy():
+    """get_app hands out a snapshot, like get_set and state() already do."""
+    with tempfile.TemporaryDirectory() as d:
+        s = Store(os.path.join(d, "data.json"))
+        app_id = s.add_app({"name": "Original", "path": "/a"})["id"]
+
+        snapshot = s.get_app(app_id)
+        snapshot["name"] = "Mutated from outside"
+        snapshot["args"].append("--should-not-appear")
+        ok(s.get_app(app_id)["name"] == "Original",
+           "mutating the returned dict does not reach the store")
+        ok(s.get_app(app_id)["args"] == [],
+           "nor does mutating a nested list inside it")
+
+        s.mark_launched(app_id)
+        ok(s.get_app(app_id)["launch_count"] == 1,
+           "the store's own internal update still lands (mark_launched)")
+
+        updated = s.update_app(app_id, {"favorite": True})
+        updated["favorite"] = False
+        ok(s.get_app(app_id)["favorite"] is True,
+           "and update_app's return value is a copy too, not the live record")
+
+        ok(s.get_app("no-such-id") is None, "a missing id still returns None")
+
+
+def test_store_refuses_to_downgrade_a_newer_file():
+    """A file saved by a schema this build doesn't know gets backed up untouched."""
+    import json
+
+    from app.core.store import SCHEMA_VERSION
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "data.json")
+        future = {"version": SCHEMA_VERSION + 1, "apps": [{"id": "a", "name": "Future App",
+                  "path": "/f", "some_field_this_build_does_not_know": "keep me"}],
+                  "categories": [], "settings": {}}
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(future, fh)
+
+        s = Store(path)
+        ok(s.newer_version == SCHEMA_VERSION + 1,
+           "the store notices the file is from a newer schema")
+        ok(s.state()["apps"][0]["name"] == "Future App",
+           "it still loads what it can, best-effort, rather than going empty")
+
+        backup = os.path.join(d, f"centurio-data.v{SCHEMA_VERSION + 1}.json")
+        ok(os.path.exists(backup), "the untouched original is preserved alongside it")
+        with open(backup, encoding="utf-8") as fh:
+            saved = json.load(fh)
+        ok(saved == future, "byte-for-byte, including the field this build can't parse")
+
+        s.flush()
+        ok(not os.path.exists(os.path.join(d, f"centurio-data.v{SCHEMA_VERSION + 2}.json")),
+           "saving the now-sanitised state doesn't touch the backup again")
+        with open(backup, encoding="utf-8") as fh:
+            still_original = json.load(fh)
+        ok(still_original == future,
+           "the backup survives even after this build writes its own (older) file back")
+
+        ok(Store(os.path.join(d, "plain.json")).newer_version is None,
+           "a fresh store with no file at all reports no version conflict")
+
+        same_version = os.path.join(d, "same.json")
+        with open(same_version, "w", encoding="utf-8") as fh:
+            json.dump({"version": SCHEMA_VERSION, "apps": [], "categories": [], "settings": {}}, fh)
+        ok(Store(same_version).newer_version is None,
+           "a file at the current schema version is not flagged")
+
+
+def test_store_load_rejects_non_object_json():
+    """Valid JSON that isn't an object (e.g. a bare list) is quarantined, not crashed on."""
+    import json
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "data.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump([1, 2, 3], fh)
+
+        raised = None
+        try:
+            state = Store(path).state()
+        except Exception as exc:
+            raised = exc
+        ok(raised is None, "a non-object top level does not crash the store")
+        ok(state["apps"] == [], "and the store falls back to an empty library")
+        ok(any(n.startswith("centurio-corrupt-") for n in os.listdir(d)),
+           "with the original quarantined for inspection, same as invalid JSON")
+
+
 def test_store_write_failure():
     """A failing save must not take down the action that triggered it."""
     import builtins
@@ -631,6 +721,23 @@ def test_store_batched_writes():
         writes["n"] = 0
         s.update_app(s.state()["apps"][0]["id"], {"favorite": True})
         ok(writes["n"] == 1, "a single update still writes immediately")
+
+        writes["n"] = 0
+        before = len(s.state()["apps"])
+        added = s.add_apps([{"name": f"Bulk{i}", "path": f"/bulk/{i}"} for i in range(15)])
+        ok(writes["n"] == 1, "adding 15 apps at once writes the file once, not 15 times")
+        ok(len(added) == 15 and len({a["id"] for a in added}) == 15,
+           "each gets its own id")
+        ok([a["order"] for a in added] == list(range(before, before + 15)),
+           "orders are sequential, same as adding them one at a time would give")
+        ok(len(s.state()["apps"]) == before + 15, "all of them land in the library")
+        added[0]["name"] = "mutated after the fact"
+        ok(s.get_app(added[0]["id"])["name"] == "Bulk0",
+           "add_apps hands back copies too, not the live records")
+
+        writes["n"] = 0
+        ok(s.add_apps([]) == [], "an empty batch is a no-op")
+        ok(writes["n"] == 0, "and doesn't write at all")
 
 
 def test_image_cache_bounded():

@@ -155,15 +155,16 @@ class ScanController:
         if not chosen:
             self.notify.show("Отметьте хотя бы одну программу", icon="check_circle", tone="muted")
             return
-        added = []
+        payload = []
         for row in chosen:
             item = row["item"]
-            added.append(self.store.add_app({
+            payload.append({
                 "name": item.get("name"), "path": item.get("path"), "icon": item.get("icon"),
                 "icon_fit": item.get("icon_fit"), "sub": item.get("sub", ""),
                 "track_exe": item.get("track_exe"), "poster": item.get("poster"),
                 "category_id": self.add_category_for(row),
-            }))
+            })
+        added = self.store.add_apps(payload)
         self.ui.view.reset_add()
         self._manual_found = []
         self.ui.view.set_screen("grid")

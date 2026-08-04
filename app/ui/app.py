@@ -219,6 +219,12 @@ class CenturioUI:
                          self.menu.control, self.toast.control], expand=True)
         self.page.add(root)
         self.refresh()
+        if self.store.newer_version:
+            self.toast.error(
+                f"Файл данных сохранён более новой версией Centurio (схема "
+                f"{self.store.newer_version}) — работаю с тем, что понимаю, "
+                f"копия оригинала сохранена рядом",
+                detail=str(self.store.path))
 
     def set_running(self, ids):
         self.running = set(ids)
@@ -2035,13 +2041,12 @@ class CenturioUI:
         if not chosen:
             self.close_onboarding()
             return
-        for item in chosen:
-            self.store.add_app({
-                "name": item.get("name"), "path": item.get("path"), "icon": item.get("icon"),
-                "icon_fit": item.get("icon_fit"), "sub": item.get("sub", ""),
-                "track_exe": item.get("track_exe"), "poster": item.get("poster"),
-                "category_id": queries.suggest_category(item, self.categories()),
-                "quick": True})
+        self.store.add_apps([{
+            "name": item.get("name"), "path": item.get("path"), "icon": item.get("icon"),
+            "icon_fit": item.get("icon_fit"), "sub": item.get("sub", ""),
+            "track_exe": item.get("track_exe"), "poster": item.get("poster"),
+            "category_id": queries.suggest_category(item, self.categories()),
+            "quick": True} for item in chosen])
         self.view.onboarding = False
         self.store.set_setting("onboarded", True)
         self.toast.show(f"Готово — {len(chosen)} {plu_programs(len(chosen))} в быстром запуске")
