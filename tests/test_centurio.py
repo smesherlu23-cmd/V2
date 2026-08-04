@@ -2124,7 +2124,7 @@ def test_ui_inbox_badge_and_triage():
         ok("Творчество" in shown, "with the category it looks like")
         ok("похоже" in shown, "marked as the suggestion")
 
-        ui.handle_key(_key("1"))
+        ui.keymap.handle_key(_key("1"))
         names = [a["name"] for a in store.state()["apps"]]
         ok(names == ["OBS Studio"], "1 puts it in the first offered category")
         ok(store.get_app(store.state()["apps"][0]["id"])["category_id"] == "create",
@@ -2136,15 +2136,15 @@ def test_ui_inbox_badge_and_triage():
         ok(not store.state()["apps"], "and takes it out of the library")
 
         first = ui.inbox()[0]["name"]
-        ui.handle_key(_key("Arrow Right"))
+        ui.keymap.handle_key(_key("Arrow Right"))
         ok(ui.inbox()[0]["name"] != first, "→ skips to the next one")
 
-        ui.handle_key(_key("Delete"))
+        ui.keymap.handle_key(_key("Delete"))
         ok(len(store.state()["inbox"]) == 1, "Del drops it from the queue")
         ui.toast.fire_action()
         ok(len(store.state()["inbox"]) == 2, "and that is undoable as well")
 
-        ui.handle_key(_key("Enter"))
+        ui.keymap.handle_key(_key("Enter"))
         ok(len(store.state()["apps"]) == 1, "Enter takes the suggestion")
 
         ui.triage.triage_defer_all()
@@ -2888,16 +2888,16 @@ def test_ui_search_palette():
         grid = _texts(ft.Column(ui.content_col.controls))
         ok("Notion" in grid, "while the grid behind deliberately does not re-sort")
 
-        ui.handle_key(_key("Tab"))
+        ui.keymap.handle_key(_key("Tab"))
         ok(ui.view.palette_focus == "actions", "Tab moves into the actions")
-        ui.handle_key(_key("Tab"))
+        ui.keymap.handle_key(_key("Tab"))
         ok(ui.view.palette_focus == "results", "and back out")
 
         hidden = []
         ui.controllers["hide_to_tray"] = lambda: hidden.append(1)
         ui.launcher.launch.return_value = {"ok": True, "running": True}
         ui.launcher.running_ids.return_value = [code]
-        ui.handle_key(_key("Enter"))
+        ui.keymap.handle_key(_key("Enter"))
         ok(ui.launcher.launch.called, "Enter launches the highlighted row")
         ok(hidden == [1], "and the window hides itself")
         ok(ui.view.query == "" and not ui.view.palette_open,
@@ -2907,17 +2907,17 @@ def test_ui_search_palette():
         hidden.clear()
         ui.toggle_search()
         ui._on_search(types_ns(control=types_ns(value="code")))
-        ui.handle_key(_key("Enter"))
+        ui.keymap.handle_key(_key("Enter"))
         ok(hidden == [], "unless «Прятать окно после запуска» is off")
 
         ui.toggle_search()
-        ui.handle_key(_key("Escape"))
+        ui.keymap.handle_key(_key("Escape"))
         ok(not ui.view.palette_open, "Esc closes the palette")
         ok(hidden == [], "and stays in the library instead of hiding the window")
-        ui.handle_key(_key("Escape"))
+        ui.keymap.handle_key(_key("Escape"))
         ok(hidden == [1], "the second Esc puts the window away")
 
-        ui.handle_key(_key("k", ctrl=True))
+        ui.keymap.handle_key(_key("k", ctrl=True))
         ok(ui.view.palette_open, "Ctrl+K opens it when the window is already up")
         ok(ui.toggle_search() is False, "and the hotkey again puts it away")
 
@@ -2956,49 +2956,49 @@ def test_ui_keyboard():
                for n in ("A", "B", "C")]
         ui, _ = _ui_for(store)
 
-        ui.handle_key(_key(",", ctrl=True))
+        ui.keymap.handle_key(_key(",", ctrl=True))
         ok(ui.view.screen == "settings", "Ctrl+, opens the settings screen")
-        ui.handle_key(_key("Escape"))
+        ui.keymap.handle_key(_key("Escape"))
         ok(ui.view.screen == "grid", "Esc leaves it")
 
-        ui.handle_key(_key("a", ctrl=True))
+        ui.keymap.handle_key(_key("a", ctrl=True))
         ok(len(ui.view.sel) == 3, "Ctrl+A selects every visible tile")
         ok(ui.view.select_mode, "and turns the bulk-select mode on with them")
-        ui.handle_key(_key("Delete"))
+        ui.keymap.handle_key(_key("Delete"))
         ok(not store.state()["apps"], "Delete removes the selection")
         ui.toast.fire_action()
         ok(len(store.state()["apps"]) == 3, "and it is undoable")
-        ui.handle_key(_key("Escape"))
+        ui.keymap.handle_key(_key("Escape"))
         ok(not ui.view.select_mode and not ui.view.sel,
            "Esc leaves the mode and drops the selection")
 
         ui.view.select_one(ids[0])
         ui._begin_capture()
         ok(ui.view.capture, "clicking the hotkey field starts listening")
-        ui.handle_key(_key("Control", ctrl=True))
+        ui.keymap.handle_key(_key("Control", ctrl=True))
         ok(ui.view.capture, "a lone modifier isn't a combination")
-        ui.handle_key(_key("G", ctrl=True, shift=True))
+        ui.keymap.handle_key(_key("G", ctrl=True, shift=True))
         ok(store.get_app(ids[0])["hotkey"] == "Ctrl+Shift+G", "the combination is recorded")
 
         ui.view.select_one(ids[1])
         ui._begin_capture()
-        ui.handle_key(_key("G", ctrl=True, shift=True))
+        ui.keymap.handle_key(_key("G", ctrl=True, shift=True))
         ok(store.get_app(ids[1])["hotkey"] is None, "a combination already in use is refused")
         ok("занята" in ui.toast.text.value, "and says so")
 
         ui._begin_capture()
-        ui.handle_key(_key("Escape"))
+        ui.keymap.handle_key(_key("Escape"))
         ok(not ui.view.capture, "Esc cancels the capture")
 
         # Комбинации, которыми в Windows уже что-то делают, не назначаются
         # никому — ни программе, ни общему вызову Centurio.
         ui.view.select_one(ids[2])
         ui._begin_capture()
-        ui.handle_key(_key("F4", alt=True))
+        ui.keymap.handle_key(_key("F4", alt=True))
         ok(store.get_app(ids[2])["hotkey"] is None, "a Windows shortcut is refused")
         ok(ui.view.capture, "capture stays open so another combination can be tried")
         ok("Windows" in ui.toast.text.value, "and the toast says why")
-        ui.handle_key(_key("Escape"))
+        ui.keymap.handle_key(_key("Escape"))
 
         # Общая комбинация — тот же захват, но по-другому именованная цель:
         # начинается через _begin_capture("launch"), а не через выбранную плитку.
@@ -3006,16 +3006,16 @@ def test_ui_keyboard():
         ui._begin_capture("launch")
         ok(ui.view.capture and ui.view.capture_target == "launch",
            "the launch hotkey uses the same capture machinery")
-        ui.handle_key(_key("F4", alt=True))
+        ui.keymap.handle_key(_key("F4", alt=True))
         ok(store.state()["settings"]["launch_hotkey"] == start,
            "a Windows shortcut is refused here too")
-        ui.handle_key(_key("Space", ctrl=True, shift=True))
+        ui.keymap.handle_key(_key("Space", ctrl=True, shift=True))
         ok(store.state()["settings"]["launch_hotkey"] == "Ctrl+Shift+Space",
            "any other combination the user presses is accepted")
 
         ui.view.select_one(ids[0])
         ui._begin_capture()
-        ui.handle_key(_key("Space", ctrl=True, shift=True))
+        ui.keymap.handle_key(_key("Space", ctrl=True, shift=True))
         ok(store.get_app(ids[0])["hotkey"] == "Ctrl+Shift+G",
            "a combination already claimed by the launch hotkey is refused for a program")
         ok("Centurio" in ui.toast.text.value, "and the toast names what already has it")
@@ -3029,32 +3029,32 @@ def test_ui_keyboard():
         ui.view.select_one(ids[1])
         ui._begin_capture()
         ok(calls == ["suspend"], "starting a capture suspends the global listener")
-        ui.handle_key(_key("H", ctrl=True))
+        ui.keymap.handle_key(_key("H", ctrl=True))
         ok(calls == ["suspend", "resume"],
            "finishing it resumes it — whether or not the combination was accepted")
 
         calls.clear()
         ui._begin_capture()
-        ui.handle_key(_key("Escape"))
+        ui.keymap.handle_key(_key("Escape"))
         ok(calls == ["suspend", "resume"], "cancelling with Esc resumes it too")
 
         calls.clear()
         ui._begin_capture()
-        ui.handle_key(_key("F4", alt=True))
+        ui.keymap.handle_key(_key("F4", alt=True))
         ok(calls == ["suspend"],
            "a refused Windows combination does not resume it — capture is still open")
-        ui.handle_key(_key("Escape"))
+        ui.keymap.handle_key(_key("Escape"))
 
         # Любые клавиши: без модификатора тоже, и Win считается модификатором.
         ui.view.select_one(ids[2])
         ui._begin_capture()
-        ui.handle_key(_key("F9"))
+        ui.keymap.handle_key(_key("F9"))
         ok(store.get_app(ids[2])["hotkey"] == "F9",
            "a bare key with no modifier at all is accepted now")
 
         ui.view.select_one(ids[0])
         ui._begin_capture()
-        ui.handle_key(_key("K", meta=True))
+        ui.keymap.handle_key(_key("K", meta=True))
         ok(store.get_app(ids[0])["hotkey"] == "Win+K", "and Win counts as a modifier too")
 
         # Flet сообщает пробел как буквальный " ", а не именем "Space", как
@@ -3064,7 +3064,7 @@ def test_ui_keyboard():
         # «Ctrl+Пробел» на экране превращался просто в «Ctrl».
         ui.view.select_one(ids[1])
         ui._begin_capture()
-        ui.handle_key(_key(" ", ctrl=True))
+        ui.keymap.handle_key(_key(" ", ctrl=True))
         ok(store.get_app(ids[1])["hotkey"] == "Ctrl+Space",
            "the space bar is recorded by name, not as a literal space")
 
@@ -3075,13 +3075,13 @@ def test_ui_keyboard():
         ui.controllers["on_library_changed"] = lambda: registered.append(1)
         ui.view.select_one(ids[1])
         ui._begin_capture()
-        ui.handle_key(_key("J", ctrl=True))
+        ui.keymap.handle_key(_key("J", ctrl=True))
         ok(registered, "setting a program's hotkey re-registers the global listener")
 
         hidden = []
         ui.controllers["hide_to_tray"] = lambda: hidden.append(1)
         ui.view.close_inspector()
-        ui.handle_key(_key("Escape"))
+        ui.keymap.handle_key(_key("Escape"))
         ok(hidden == [1], "Esc with nothing left to close hides the window")
 
 
@@ -3165,7 +3165,7 @@ def test_ui_settings_screen():
         ui.set_settings_tab("keys")
         start = store.state()["settings"]["launch_hotkey"]
         ui._begin_capture("launch")
-        ui.handle_key(_key("Space", ctrl=True, alt=True))
+        ui.keymap.handle_key(_key("Space", ctrl=True, alt=True))
         ok(store.state()["settings"]["launch_hotkey"] == "Ctrl+Alt+Space",
            "the combination becomes whatever was pressed")
         ok(store.state()["settings"]["launch_hotkey"] != start, "not stuck with the default")
@@ -3392,7 +3392,7 @@ def test_shutdown_releases_resources():
     shutdown = main_mod.shutdown
 
     page_module = _read("app", "main.py")
-    ok("ui.handle_key(e)" in page_module,
+    ok("ui.keymap.handle_key(e)" in page_module,
        "the page's key handler delegates to the UI's key table")
 
     calls = []

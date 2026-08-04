@@ -235,7 +235,7 @@ def main(page: ft.Page):
 
     def on_key(e: ft.KeyboardEvent):
         try:
-            ui.handle_key(e)
+            ui.keymap.handle_key(e)
         except Exception:
             log.exception("управление нажатием клавиши ошибка")
         if e.ctrl and (e.key or "").isdigit():

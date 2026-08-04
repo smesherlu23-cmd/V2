@@ -13,7 +13,7 @@ from ..controllers.scan import ScanController
 from ..controllers.sets import SetsController
 from ..controllers.triage import TriageController
 from ..core import queries
-from ..core.hotkeys import free_quick_slot, is_reserved, quick_accels, set_accels
+from ..core.hotkeys import free_quick_slot, quick_accels, set_accels
 from ..core.store import Store
 from ..core.text import plu_apps, plu_hits, plu_programs, plu_windows, short_ago, time_ago
 from ..core.view_state import ViewState
@@ -25,6 +25,7 @@ from . import widgets as Wg
 from .context_menus import ContextMenus
 from .format import T
 from .images import img_b64, is_launcher_art
+from .keymap import Keymap
 from .menus import MenuHost
 from .toast import Notifier, ToastHost
 
@@ -62,6 +63,7 @@ class CenturioUI:
         self.toast = ToastHost(page)
         self.notify = Notifier(self.toast)
         self.context_menus = ContextMenus(self)
+        self.keymap = Keymap(self)
         self.menu = MenuHost(page, on_dismiss=self.context_menus.on_menu_dismissed)
         self.set_ops = SetsController(self)
         self.scan = ScanController(self)
@@ -1405,125 +1407,6 @@ class CenturioUI:
         self.bulk_layer.visible = True
 
 
-    def handle_key(self, e: ft.KeyboardEvent) -> None:
-        key = e.key or ""
-        if self.view.capture:
-            self._capture_key(e)
-            return
-        if self.menu.open and key == "Escape":
-            self.menu.close()
-            return
-        if self.view.onboarding:
-            if key == "Escape":
-                self.close_onboarding()
-            return
-        if e.ctrl and key.lower() == "k":
-            self._focus_search()
-            return
-        if e.ctrl and key == ",":
-            self._open_settings()
-            return
-        if self.view.palette_open:
-            self._palette_key(e, key)
-            return
-        self._library_key(e, key)
-
-    def _palette_key(self, e, key):
-        rows = self._palette_rows()
-        actions = queries.palette_actions(self._palette_app())
-        count = len(actions) if self.view.palette_focus == "actions" else len(rows)
-        if key in ("Arrow Down", "Arrow Up"):
-            self.view.move_palette(1 if key == "Arrow Down" else -1, count)
-            self._refresh_palette_only()
-        elif key == "Tab":
-            self.view.focus_palette_actions(len(rows))
-            self._refresh_palette_only()
-        elif key in ("Enter", "Numpad Enter"):
-            self._palette_activate(admin=bool(e.ctrl))
-        elif key == "Escape":
-            self._close_palette()
-
-    def _palette_activate(self, admin: bool = False):
-        if self.view.palette_focus == "actions":
-            actions = queries.palette_actions(self._palette_app())
-            if actions:
-                index = min(self.view.palette_index, len(actions) - 1)
-                self.run_palette_action(actions[index]["key"])
-            return
-        rows = self._palette_rows()
-        if not rows:
-            return
-        row = rows[min(self.view.palette_index, len(rows) - 1)]
-        if row["kind"] == "set":
-            self.set_ops.launch_set(row["set"]["id"], from_palette=True)
-        else:
-            self._launch(row["app"]["id"], from_palette=True, as_admin=admin)
-
-    def _library_key(self, e, key):
-        if self.view.screen == "triage":
-            if self._triage_key(key):
-                return
-        if key == "Escape":
-            if self.view.escape():
-                self.refresh()
-            else:
-                self._hide_to_tray()
-        elif e.ctrl and key.lower() == "a" and self.view.screen == "grid":
-            self._select_all_visible()
-        elif key == "Delete" and self.view.sel:
-            self._remove_apps(list(self.view.sel))
-        elif e.ctrl and key in ("Enter", "Numpad Enter") and self.view.screen == "add":
-            self.scan.commit_add()
-        elif key in ("Arrow Right", "Arrow Down"):
-            self.move_selection(1)
-        elif key in ("Arrow Left", "Arrow Up"):
-            self.move_selection(-1)
-        elif key in ("Enter", "Numpad Enter"):
-            self.activate_selected()
-
-    def _triage_key(self, key) -> bool:
-        queue = self.inbox()
-        if not queue:
-            return False
-        item = queue[0]
-        picks = queries.suggest_categories(item, self.categories())
-        if key in ("1", "2", "3", "4"):
-            index = int(key) - 1
-            if index < len(picks):
-                self.triage.triage_place(item["id"], picks[index]["id"])
-            return True
-        if key in ("Enter", "Numpad Enter"):
-            if picks:
-                self.triage.triage_place(item["id"], picks[0]["id"])
-            return True
-        if key == "Arrow Right":
-            self.triage.triage_skip(item["id"])
-            return True
-        if key == "Delete":
-            self.triage.triage_drop(item["id"])
-            return True
-        return False
-
-    def _capture_key(self, e):
-        key = "Space" if e.key == " " else (e.key or "")
-        if key in ("Control", "Alt", "Shift", "Meta"):
-            return
-        if key == "Escape":
-            self._stop_capture()
-            self.refresh()
-            return
-        parts = [name for flag, name in ((e.ctrl, "Ctrl"), (e.alt, "Alt"),
-                                         (e.shift, "Shift"), (e.meta, "Win")) if flag]
-        accel = "+".join(parts + [key if len(key) > 1 else key.upper()])
-        if is_reserved(accel):
-            self.toast.error(f"{accel} занята Windows — эту комбинацию система не отдаст")
-            return
-        target = self.view.capture_target
-        self._stop_capture()
-        if target == "launch":
-            self._set_launch_hotkey(accel)
-        else:
-            self._set_hotkey(self.view.inspector, accel)
 
     def _flat_apps(self, sections=None):
         return queries.flatten_sections(self._sections() if sections is None else sections)
