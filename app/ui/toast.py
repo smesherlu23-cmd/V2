@@ -148,3 +148,44 @@ class ToastHost:
                 self.control.update()
         except Exception:
             log.exception("сбой при обновлении тоста")
+
+
+NOTE_ICONS = {
+    "check": ft.Icons.CHECK,
+    "check_circle": ft.Icons.CHECK_CIRCLE,
+    "search": ft.Icons.SEARCH,
+    "inbox": ft.Icons.INBOX,
+    "layers": ft.Icons.LAYERS,
+    "folder": ft.Icons.FOLDER,
+    "link": ft.Icons.LINK,
+    "save": ft.Icons.SAVE,
+    "close": ft.Icons.CLOSE,
+    "arrange": ft.Icons.CROP_FREE,
+    "monitor": ft.Icons.DESKTOP_WINDOWS,
+    "delete": ft.Icons.DELETE_OUTLINE,
+    "magic": ft.Icons.AUTO_AWESOME,
+}
+
+NOTE_TONES = {"muted": C.MUTED, "good": C.GREEN}
+
+
+class Notifier:
+    """Тосты по именам, а не по объектам Flet.
+
+    Позволяет контроллерам сообщать о результате, не импортируя ни flet,
+    ни палитру: имя значка и тон переводятся в объекты здесь, в слое
+    представления.
+    """
+
+    def __init__(self, toast: ToastHost):
+        self.toast = toast
+
+    def show(self, text: str, icon: str = "check", tone: str = "good",
+             action=None, action_label: str | None = None, detail: str | None = None):
+        self.toast.show(text, icon=NOTE_ICONS.get(icon, ft.Icons.CHECK),
+                        icon_color=NOTE_TONES.get(tone, C.GREEN),
+                        action=action, action_label=action_label, detail=detail)
+
+    def error(self, text: str, action=None, action_label: str | None = None,
+              detail: str | None = None):
+        self.toast.error(text, action=action, action_label=action_label, detail=detail)

@@ -1867,13 +1867,13 @@ def test_ui_matches_the_design_sizes():
            "and the scrim starts under the header, which stays above it")
         ui._close_palette()
 
-        ui._toggle_select_mode()
+        ui.toggle_select_mode()
         ui._tile_tap(second, [second])
         ok(_sized(ui.bulk_layer, None, 56), "the floating action bar is 56 tall")
         ok(ui.bulk_layer.bottom == 26, "sitting 26 off the bottom")
         ok(_sized(ft.Column(ui.content_col.controls), 20, 20),
            "and the tiles carry a 20x20 checkbox in this mode")
-        ui._toggle_select_mode()
+        ui.toggle_select_mode()
 
         rec = store.add_set("Набор", [app_id, second])
         ui.refresh()
@@ -2103,7 +2103,7 @@ def test_ui_inbox_badge_and_triage():
         ui.refresh()
         ok("2" in _texts(ui.rail_container), "the badge counts what is waiting")
 
-        ui._open_triage()
+        ui.open_triage()
         shown = _texts(ft.Column(ui.content_col.controls)) if False else _texts(
             ui.content_col.controls[0])
         ok("Разбор" in shown, "the queue is a screen inside the window")
@@ -2141,7 +2141,7 @@ def test_ui_inbox_badge_and_triage():
         ok(len(store.state()["inbox"]) == 1, "undo brings the queue back")
 
         store.clear_inbox()
-        ui._open_triage()
+        ui.open_triage()
         ok("Всё разобрано" in _texts(ui.content_col.controls[0]),
            "an empty queue has its own finished screen")
 
@@ -2472,7 +2472,7 @@ def test_ui_bulk_operations():
         ui, page = _ui_for(store)
 
         ok(not ui.bulk_layer.visible, "the floating bar is not there to begin with")
-        ui._toggle_select_mode()
+        ui.toggle_select_mode()
         ok(ui.view.select_mode, "«Выбрать» turns the mode on")
         ok(not ui.inspector_container.visible, "the inspector steps aside for it")
         ok(not ui.bulk_layer.visible, "and the bar waits until something is picked")
@@ -2523,7 +2523,7 @@ def test_ui_bulk_operations():
         ui.toast.fire_action()
         ok(store.get_app(ids[0])["favorite"] is False, "and is undoable")
 
-        ui._toggle_select_mode()
+        ui.toggle_select_mode()
         ok(not ui.view.select_mode and not ui.view.sel,
            "«Отмена» leaves the mode and drops the selection")
         ok(not ui.bulk_layer.visible, "taking the bar with it")
@@ -2544,7 +2544,7 @@ def test_ui_bulk_operations():
         ui._range_to(ids[3])
         ok(ui.view.sel == ids[1:], "«Выбрать до этой» takes the range with the mouse")
 
-        ui._toggle_select_mode()
+        ui.toggle_select_mode()
         ok(not ui.view.select_mode, "leaving select mode")
         ui._app_menu(store.get_app(ids[0]), _tap())
         ok(ui.view.inspector == ids[0] and not ui.menu.open,
@@ -2622,7 +2622,7 @@ def test_ui_add_screen():
             store.add_app({"name": "Notion", "path": "/x/notion.exe", "category_id": "work"})
             ui, _ = _ui_for(store)
 
-            ui._open_add()
+            ui.open_add()
             ok(_settle_threads(before), "the scan thread finishes")
             ui.refresh()
             ok(ui.view.screen == "add", "«Найти и добавить» is a screen, not a dialog")
@@ -2669,7 +2669,7 @@ def test_ui_add_screen():
                "and nothing new landed in the library")
             store.clear_inbox()
 
-            ui._open_add()
+            ui.open_add()
             ui.view.reset_add()
             rows = {r["name"]: r for g in ui.scan.found_groups() for r in g["rows"]}
             ui.scan.toggle_add_row(rows["Elden Ring"])
@@ -2709,7 +2709,7 @@ def test_ui_scanning_is_just_a_spinner():
         with tempfile.TemporaryDirectory() as d:
             store = Store(os.path.join(d, "data.json"))
             ui, _ = _ui_for(store)
-            ui._open_add()
+            ui.open_add()
 
             deadline = time.time() + 3
             while not ui.scan.scanning() and time.time() < deadline:

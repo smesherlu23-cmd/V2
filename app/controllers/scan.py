@@ -5,13 +5,10 @@ import threading
 import time
 from pathlib import Path
 
-import flet as ft
-
 from ..core import queries
 from ..core.text import plu_apps
 from ..infra import log
 from ..platform import discovery
-from ..ui import colors as C
 
 DISCOVERY_TTL = 120.0
 
@@ -21,6 +18,7 @@ class ScanController:
     def __init__(self, ui):
         self.ui = ui
         self.store = ui.store
+        self.notify = ui.notify
         self._discovered = None
         self._discovered_at = 0.0
         self._scanning = False
@@ -71,7 +69,7 @@ class ScanController:
             with self._scan_lock:
                 self._scanning = False
                 self._scan_errors = errors
-            self.ui._safe_refresh()
+            self.ui.safe_refresh()
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -102,10 +100,10 @@ class ScanController:
     def add_manual_path(self, text=None):
         raw = (text if text is not None else self.ui.view.manual_path or "").strip().strip('"')
         if not raw:
-            self.ui.toast.error("Вставьте путь к программе")
+            self.notify.error("Вставьте путь к программе")
             return
         if not os.path.isfile(raw):
-            self.ui.toast.error("Файл не найден", detail=raw)
+            self.notify.error("Файл не найден", detail=raw)
             return
         name = Path(raw).stem.replace("-", " ").replace("_", " ").strip()
         item = {"name": (name[:1].upper() + name[1:]) if name else "Программа",
@@ -113,21 +111,18 @@ class ScanController:
                 "icon": discovery.extract_icon(raw, self.ui.icon_cache_dir())}
         found = list(self._manual_found)
         if any((f.get("path") or "").lower() == raw.lower() for f in found):
-            self.ui.toast.show("Этот путь уже в списке", icon=ft.Icons.CHECK_CIRCLE,
-                               icon_color=C.MUTED)
+            self.notify.show("Этот путь уже в списке", icon="check_circle", tone="muted")
             return
         found.append(item)
         self._manual_found = found
         self.ui.view.manual_path = ""
         self.ui.view.add_sel.add(raw.lower())
-        self.ui.toast.show(f"{item['name']} добавлен в список", icon=ft.Icons.LINK,
-                           icon_color=C.MUTED)
+        self.notify.show(f"{item['name']} добавлен в список", icon="link", tone="muted")
         self.ui.refresh()
 
     def toggle_add_row(self, row):
         if not row["is_new"]:
-            self.ui.toast.show(f"{row['name']} уже в библиотеке", icon=ft.Icons.CHECK_CIRCLE,
-                               icon_color=C.MUTED)
+            self.notify.show(f"{row['name']} уже в библиотеке", icon="check_circle", tone="muted")
             return
         self.ui.view.toggle_add(row["key"])
         self.ui.refresh()
@@ -158,8 +153,7 @@ class ScanController:
     def commit_add(self):
         chosen = self._chosen_add_rows()
         if not chosen:
-            self.ui.toast.show("Отметьте хотя бы одну программу", icon=ft.Icons.CHECK_CIRCLE,
-                               icon_color=C.MUTED)
+            self.notify.show("Отметьте хотя бы одну программу", icon="check_circle", tone="muted")
             return
         added = []
         for row in chosen:
@@ -174,49 +168,39 @@ class ScanController:
         self._manual_found = []
         self.ui.view.set_screen("grid")
         self.ui.view.filter = "all"
-        self.ui.toast.show(f"Добавлено {len(added)} {plu_apps(len(added))}",
+        self.notify.show(f"Добавлено {len(added)} {plu_apps(len(added))}",
                            action=lambda: self._restore_added(added), action_label="Вернуть")
-        self.ui._on_library_changed()
+        self.ui.on_library_changed()
         self.backfill_icons_async()
 
     def defer_add(self):
         chosen = self._chosen_add_rows()
         if not chosen:
-            self.ui.toast.show("Отметьте, что отложить", icon=ft.Icons.INBOX,
-                               icon_color=C.MUTED)
+            self.notify.show("Отметьте, что отложить", icon="inbox", tone="muted")
             return
         queued = self.store.queue_inbox([r["item"] for r in chosen])
         self.ui.view.reset_add()
         self.ui.view.set_screen("grid")
-        self.ui.toast.show(f"В разборе: {queued}", icon=ft.Icons.INBOX, icon_color=C.MUTED,
-                           action=self.ui._open_triage, action_label="Разобрать")
-        self.ui._on_library_changed()
+        self.notify.show(f"В разборе: {queued}", icon="inbox", tone="muted",
+                           action=self.ui.open_triage, action_label="Разобрать")
+        self.ui.on_library_changed()
 
     def _restore_added(self, records):
         self.store.remove_apps([r["id"] for r in records])
-        self.ui._on_library_changed()
+        self.ui.on_library_changed()
 
     def pick_file(self):
-        picker = getattr(self.ui, "_file_picker", None)
-        if picker is None:
-            picker = ft.FilePicker()
-            self.ui._file_picker = picker
-            self.ui.page.overlay.append(picker)
-            self.ui.page.update()
-        picker.on_result = self._on_file_picked
-        picker.pick_files(dialog_title="Выберите программу", allow_multiple=False)
+        self.ui.ask_for_file("Выберите программу", self.file_picked)
 
-    def _on_file_picked(self, e):
-        if not e.files:
+    def file_picked(self, path):
+        if not path:
             return
-        picked = e.files[0]
-        path = picked.path or picked.name
-        target = getattr(self.ui, "_relocating", None)
+        target = self.ui.relocating
         if target:
-            self.ui._relocating = None
+            self.ui.relocating = None
             self.store.update_app(target, {"path": path, "icon": None, "poster": None})
-            self.ui.toast.show("Путь обновлён", icon=ft.Icons.CHECK)
-            self.ui._on_library_changed()
+            self.notify.show("Путь обновлён", icon="check")
+            self.ui.on_library_changed()
             self.backfill_icons_async()
             return
         if self.ui.view.screen == "add":
@@ -231,11 +215,11 @@ class ScanController:
         record = self.store.add_app({"name": name, "path": path, "icon": icon,
                                      "category_id": cat_id})
         self.ui.view.select_one(record["id"])
-        self.ui.toast.show(f"{name} добавлен в «{cat['name']}»" if cat else f"{name} добавлен",
-                           icon=ft.Icons.AUTO_AWESOME, icon_color=C.MUTED,
+        self.notify.show(f"{name} добавлен в «{cat['name']}»" if cat else f"{name} добавлен",
+                           icon="magic", tone="muted",
                            action=lambda: self._cycle_category(record["id"]),
                            action_label="Другая")
-        self.ui._on_library_changed()
+        self.ui.on_library_changed()
 
     def _cycle_category(self, app_id):
         cats = self.ui.categories()
@@ -247,23 +231,21 @@ class ScanController:
         index = ids.index(current) if current in ids else -1
         nxt = cats[(index + 1) % len(cats)]
         self.store.update_app(app_id, {"category_id": nxt["id"]})
-        self.ui.toast.show(f"Теперь в «{nxt['name']}»", icon=ft.Icons.FOLDER,
-                           icon_color=C.MUTED)
+        self.notify.show(f"Теперь в «{nxt['name']}»", icon="folder", tone="muted")
         self.ui.refresh()
 
     def backfill_icons_async(self):
         def work():
             try:
                 if discovery.backfill_icons(self.store, self.ui.icon_cache_dir()):
-                    self.ui._on_library_changed()
+                    self.ui.on_library_changed()
             except Exception:
                 log.exception("не удалось повторно разрешить иконки после добавления")
         threading.Thread(target=work, daemon=True).start()
 
     def rescan(self, silent: bool = False):
         if not silent:
-            self.ui.toast.show("Смотрю, что установлено", icon=ft.Icons.SEARCH,
-                               icon_color=C.MUTED)
+            self.notify.show("Смотрю, что установлено", icon="search", tone="muted")
 
         def work():
             try:
@@ -282,23 +264,21 @@ class ScanController:
                 new = [a for a in found if (a.get("path") or "").lower() not in existing]
                 if new and self.store.state()["settings"].get("triage", True):
                     queued = self.store.queue_inbox(new)
-                    self.ui._on_library_changed()
+                    self.ui.on_library_changed()
                     if queued:
                         word = "новая программа ждёт" if queued == 1 else "новые программы ждут"
-                        self.ui.toast.show(f"{queued} {word} в разборе", icon=ft.Icons.INBOX,
-                                          icon_color=C.GREEN, action=self.ui._open_triage,
+                        self.notify.show(f"{queued} {word} в разборе", icon="inbox", tone="good", action=self.ui.open_triage,
                                           action_label="Разобрать")
                     return
-                self.ui._on_library_changed()
+                self.ui.on_library_changed()
                 if new:
-                    self.ui.toast.show(f"Нашлось нового: {len(new)}", icon=ft.Icons.SEARCH,
-                                       icon_color=C.MUTED, action=self.ui._open_add,
+                    self.notify.show(f"Нашлось нового: {len(new)}", icon="search", tone="muted", action=self.ui.open_add,
                                        action_label="Показать")
                 elif not silent:
-                    self.ui.toast.show("Иконки обновлены" if changed else "Всё актуально")
+                    self.notify.show("Иконки обновлены" if changed else "Всё актуально")
             except Exception:
                 log.exception("не удалось пересканировать")
                 if not silent:
-                    self.ui.toast.error("Не удалось пересканировать",
+                    self.notify.error("Не удалось пересканировать",
                                         action=lambda: self.rescan(), action_label="Повторить")
         threading.Thread(target=work, daemon=True).start()

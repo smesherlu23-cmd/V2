@@ -9,7 +9,7 @@ import time
 import uuid
 from pathlib import Path
 
-from ..infra import log
+from ..infra import log, paths
 from ..infra.debounce import Debounce
 from . import layout as L
 
@@ -238,8 +238,7 @@ PERSIST_DEBOUNCE_DELAY = 1.5
 
 
 def default_data_path() -> Path:
-    base = Path(os.environ.get("APPDATA") or Path.home())
-    return base / "Centurio" / DATA_FILENAME
+    return paths.data_dir() / DATA_FILENAME
 
 
 class Store:

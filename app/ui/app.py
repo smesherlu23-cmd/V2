@@ -26,7 +26,7 @@ from . import widgets as Wg
 from .format import T
 from .images import img_b64, is_launcher_art
 from .menus import MenuHost
-from .toast import ToastHost
+from .toast import Notifier, ToastHost
 
 WINDOW_TTL = 2.0
 HEADER_SIDES_W = 320
@@ -47,7 +47,7 @@ class CenturioUI:
         self._settings = self.store.state()["settings"]
         self._accels: dict[str, str] = {}
         self._set_accels: dict[str, str] = {}
-        self._relocating: str | None = None
+        self.relocating: str | None = None
         self._win_lock = threading.Lock()
         self._win_snapshot: list[dict] = []
         self._win_at = 0.0
@@ -60,6 +60,7 @@ class CenturioUI:
         self._dirty = False
 
         self.toast = ToastHost(page)
+        self.notify = Notifier(self.toast)
         self.menu = MenuHost(page, on_dismiss=self._on_menu_dismissed)
         self.set_ops = SetsController(self)
         self.scan = ScanController(self)
@@ -492,7 +493,7 @@ class CenturioUI:
         triage_active = self.view.screen == "triage"
         items.append(self._rail_item(
             ft.Icon(ft.Icons.INBOX, size=18, color=C.TEXT if triage_active else C.TEXT_2),
-            triage_active, lambda: self._open_triage(),
+            triage_active, lambda: self.open_triage(),
             f"Разбор · {waiting}" if waiting and not self.calm() else "Разбор",
             badge=self._inbox_badge(waiting) if waiting and not self.calm() else None,
             outlined=True))
@@ -688,7 +689,7 @@ class CenturioUI:
     def _build_toolbar(self):
         select = Wg.outline_btn(
             "Выбрать",
-            self._toggle_select_mode,
+            self.toggle_select_mode,
             ft.Icons.CHECK_BOX if self.view.select_mode
             else ft.Icons.CHECK_BOX_OUTLINE_BLANK,
             active=self.view.select_mode)
@@ -724,7 +725,7 @@ class CenturioUI:
         right = (T("Клик — отметить · Ctrl+A — всё · правая кнопка — до этой",
                    size=11.5, color=C.MUTED_2)
                  if self.view.select_mode and not self.calm() else
-                 Wg.primary_btn("Добавить", self._open_add, self._accent(), self.calm(),
+                 Wg.primary_btn("Добавить", self.open_add, self._accent(), self.calm(),
                                ft.Icons.ADD, height=34))
         return ft.Container(
             ft.Row(left + [sort_btn, view_toggle, ft.Container(expand=True), right],
@@ -751,7 +752,7 @@ class CenturioUI:
             return [self._empty("Библиотека пуста",
                                 "Centurio посмотрит, что установлено, и предложит отметить "
                                 "нужное. Можно и указать файл вручную.",
-                                "Найти и добавить", self._open_add)]
+                                "Найти и добавить", self.open_add)]
 
         sections = self._sections()
         self._sel_id = self._selected_id(sections)
@@ -794,7 +795,7 @@ class CenturioUI:
                                "отсюда, не удаляя их.", None, None)
         return self._empty("Здесь пока пусто",
                            "Добавьте программы — или перетащите плитку на значок "
-                           "категории слева.", "Добавить", self._open_add)
+                           "категории слева.", "Добавить", self.open_add)
 
     def _quick_row(self):
         cards = [self._set_card(s) for s in self.sets() if s.get("quick")]
@@ -1408,7 +1409,7 @@ class CenturioUI:
         return float(getattr(e, "global_x", 0) or 0), float(getattr(e, "global_y", 0) or 0)
 
     def _on_menu_dismissed(self):
-        self._safe_refresh()
+        self.safe_refresh()
 
     def _app_menu(self, app, e):
         app = self.store.get_app(app["id"]) or app
@@ -1454,7 +1455,7 @@ class CenturioUI:
                            lambda: self._remove_apps(ids), danger=True),
             ]
         rows += [menus.separator(),
-                 menus.item(ft.Icons.CLOSE, "Выйти из режима", self._toggle_select_mode,
+                 menus.item(ft.Icons.CLOSE, "Выйти из режима", self.toggle_select_mode,
                             hint="" if self.calm() else "Esc")]
         header = (menus.text_header(f"Выбрано {len(ids)}") if ids
                   else menus.app_header(self, app, app["id"] in self.running))
@@ -1848,7 +1849,7 @@ class CenturioUI:
             self.view.open_palette()
         self._refresh_palette_only()
 
-    def _toggle_select_mode(self):
+    def toggle_select_mode(self):
         if self.view.select_mode:
             self.view.leave_select_mode()
         else:
@@ -1942,7 +1943,7 @@ class CenturioUI:
         if not again and not as_admin and app_id in self.running and self._switch_to(app):
             self.toast.show(f"{app['name']} — переключились", icon=ft.Icons.SYNC_ALT,
                             icon_color=C.MUTED)
-            self._after_launch(from_palette)
+            self.after_launch(from_palette)
             return
         payload = dict(app, run_as_admin=True) if as_admin else app
         try:
@@ -1957,7 +1958,7 @@ class CenturioUI:
         self.running = set(self.launcher.running_ids())
         if not again:
             self.toast.show(f"{app['name']} открыт", icon=ft.Icons.PLAY_ARROW)
-        self._after_launch(from_palette)
+        self.after_launch(from_palette)
 
     def _launch_failed(self, app, message):
         missing = "не найден" in message.lower()
@@ -1967,16 +1968,16 @@ class CenturioUI:
                          action_label="Найти" if missing else None)
         self.refresh()
 
-    def _after_launch(self, from_palette: bool = False):
+    def after_launch(self, from_palette: bool = False):
         if from_palette:
             self.view.close_palette()
             self.search_field.value = ""
             if self.setting("hide_after", True):
                 self._hide_to_tray()
-        self._safe_refresh()
+        self.safe_refresh()
 
     def _relocate(self, app_id):
-        self._relocating = app_id
+        self.relocating = app_id
         self.scan.pick_file()
 
     def run_palette_action(self, key: str):
@@ -2015,7 +2016,7 @@ class CenturioUI:
 
     def _toggle_quick(self, app_id, value):
         self.store.update_app(app_id, {"quick": bool(value)})
-        self._on_library_changed()
+        self.on_library_changed()
         accel = quick_accels(self.store.state()["apps"]).get(app_id)
         self.toast.show(f"Закреплено · {accel}" if value and accel
                         else "Закреплено" if value else "Откреплено",
@@ -2035,7 +2036,7 @@ class CenturioUI:
                         icon_color=C.MUTED,
                         action=lambda: self._hide_apps(ids, not hidden),
                         action_label="Отменить")
-        self._on_library_changed()
+        self.on_library_changed()
 
     def _set_hotkey(self, app_id, accel):
         if not app_id:
@@ -2054,8 +2055,8 @@ class CenturioUI:
                 self.refresh()
                 return
         self.store.update_app(app_id, {"hotkey": accel})
-        self._on_library_changed()
-        self._on_library_changed()
+        self.on_library_changed()
+        self.on_library_changed()
         self.toast.show(f"Горячая клавиша: {accel}" if accel else "Горячая клавиша убрана",
                         icon=ft.Icons.BOLT, icon_color=C.MUTED)
 
@@ -2071,6 +2072,24 @@ class CenturioUI:
     def _set_admin(self, app_id, value):
         self.store.update_app(app_id, {"run_as_admin": bool(value)})
         self.refresh()
+
+    def ask_for_file(self, title, on_path, extensions=None):
+        picker = getattr(self, "_file_picker", None)
+        if picker is None:
+            picker = ft.FilePicker()
+            self._file_picker = picker
+            self.page.overlay.append(picker)
+            self.page.update()
+
+        def on_result(e):
+            if not e.files:
+                on_path(None)
+                return
+            picked = e.files[0]
+            on_path(picked.path or picked.name)
+        picker.on_result = on_result
+        picker.pick_files(dialog_title=title, allow_multiple=False,
+                          allowed_extensions=extensions)
 
     def _pick_working_dir(self, app_id):
         picker = getattr(self, "_dir_picker", None)
@@ -2101,14 +2120,14 @@ class CenturioUI:
             for app_id, old in before.items():
                 self.store.update_app(app_id, {"category_id": old}, persist=False)
             self.store.flush()
-            self._on_library_changed()
+            self.on_library_changed()
 
         first = next((a["name"] for a in self.apps() if a["id"] == ids[0]), "")
         text = (f"{first} переложен в «{cat['name']}»" if moved == 1
                 else f"Переложено {moved} в «{cat['name']}»")
         self.toast.show(text, icon=ft.Icons.FOLDER, icon_color=C.MUTED,
                         action=undo, action_label="Вернуть")
-        self._on_library_changed()
+        self.on_library_changed()
 
     def _bulk_favorite(self, ids):
         before = [i for i in ids if not (self.store.get_app(i) or {}).get("favorite")]
@@ -2148,17 +2167,17 @@ class CenturioUI:
                 else f"Убрано {len(gone)} {plu_apps(len(gone))}")
         self.toast.show(text, icon=ft.Icons.DELETE_OUTLINE, icon_color=C.MUTED,
                         action=lambda: self._restore_apps(gone), action_label="Вернуть")
-        self._on_library_changed()
+        self.on_library_changed()
 
     def _restore_apps(self, records):
         self.store.restore_apps(records)
-        self._on_library_changed()
+        self.on_library_changed()
 
     def _add_category(self):
         cat = self.store.add_category("Новая категория")
         self.view.set_filter(f"category:{cat['id']}")
         self.view.open_popover(cat["id"])
-        self._on_library_changed()
+        self.on_library_changed()
 
     def _move_category(self, cat_id, delta):
         self.store.move_category(cat_id, delta)
@@ -2175,7 +2194,7 @@ class CenturioUI:
     def rename_category(self, cat_id, name):
         if (name or "").strip():
             self.store.update_category(cat_id, {"name": name.strip()})
-            self._on_library_changed()
+            self.on_library_changed()
 
     def set_category_color(self, cat_id, color):
         self.store.update_category(cat_id, {"color": color})
@@ -2241,13 +2260,13 @@ class CenturioUI:
             text += f", {moved} {plu_apps(moved)} перенесено"
         self.toast.show(text, icon=ft.Icons.DELETE_OUTLINE, icon_color=C.MUTED,
                         action=lambda: self._restore_category(undo), action_label="Вернуть")
-        self._on_library_changed()
+        self.on_library_changed()
 
     def _restore_category(self, undo):
         self.store.restore_category(undo)
-        self._on_library_changed()
+        self.on_library_changed()
 
-    def _open_add(self):
+    def open_add(self):
         self.view.set_screen("add")
         self.view.reset_add()
         self.scan.start_scan()
@@ -2261,7 +2280,7 @@ class CenturioUI:
         self.view.settings_tab = tab
         self.refresh()
 
-    def _open_triage(self):
+    def open_triage(self):
         self.view.set_screen("triage")
         self.refresh()
 
@@ -2297,7 +2316,7 @@ class CenturioUI:
             return
         self.set_setting("launch_hotkey", accel)
 
-    def _on_library_changed(self):
+    def on_library_changed(self):
         self.view.revalidate(self.categories())
         cb = self.controllers.get("on_library_changed")
         if cb:
@@ -2393,7 +2412,7 @@ class CenturioUI:
         self.view.onboarding = False
         self.store.set_setting("onboarded", True)
         self.toast.show(f"Готово — {len(chosen)} {plu_programs(len(chosen))} в быстром запуске")
-        self._on_library_changed()
+        self.on_library_changed()
         self.scan.backfill_icons_async()
 
     def _render_popover(self):
@@ -2419,7 +2438,7 @@ class CenturioUI:
         self.onboarding_layer.content = dialogs.build_onboarding(self)
         self.onboarding_layer.visible = True
 
-    def _safe_refresh(self):
+    def safe_refresh(self):
         try:
             self.refresh()
         except Exception:

@@ -400,7 +400,7 @@ def _palette_action_row(ui, action, index):
 def _palette_empty(ui):
     return ft.Container(
         ft.Row([T("Ничего не найдено", size=13.5, color=C.MUTED, expand=True),
-                Wg.link_btn("Найти на диске", ui._open_add)],
+                Wg.link_btn("Найти на диске", ui.open_add)],
                vertical_alignment=ft.CrossAxisAlignment.CENTER),
         padding=ft.padding.only(16, 14, 16, 16))
 
@@ -429,7 +429,7 @@ def build_bulk_bar(ui):
                 T("" if ui.calm() else "Esc", size=10.5, color=C.MUTED_2,
                   font_family="monospace")], spacing=7, tight=True),
         height=36, padding=ft.padding.symmetric(0, 12), border_radius=9,
-        alignment=ft.alignment.center, on_click=lambda e: ui._toggle_select_mode())
+        alignment=ft.alignment.center, on_click=lambda e: ui.toggle_select_mode())
     Wg.hoverable(cancel, None, C.BAR_BTN)
 
     in_hidden = ui.view.filter == "hidden"
@@ -817,7 +817,7 @@ def _triage_done(ui):
               size=13, color=C.MUTED_2, width=300, text_align=ft.TextAlign.CENTER),
             ft.Container(ft.Row([
                 Wg.primary_btn("К библиотеке", ui.back_to_grid, ui._accent(), ui.calm()),
-                Wg.outline_btn("Поискать ещё", ui._open_add),
+                Wg.outline_btn("Поискать ещё", ui.open_add),
             ], spacing=8, alignment=ft.MainAxisAlignment.CENTER),
                 padding=ft.padding.only(0, 8, 0, 0)),
         ], spacing=16, tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER,

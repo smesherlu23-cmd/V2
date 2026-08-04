@@ -10,8 +10,6 @@ import os
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -89,7 +87,6 @@ def test_internal_imports_resolve():
     assert not broken, "unresolvable internal imports:\n  " + "\n  ".join(broken)
 
 
-@pytest.mark.xfail(strict=True, reason="контроллеры ещё зависят от ui, log от core")
 def test_layers_do_not_depend_outwards():
     rank = {"infra": 0, "core": 1, "platform": 1, "controllers": 2, "ui": 3}
     violations: list[str] = []
