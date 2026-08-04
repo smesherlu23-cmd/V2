@@ -115,54 +115,6 @@ class CenturioUI:
         self.onboarding_layer = ft.Container(left=0, top=0, right=0, bottom=0, visible=False)
 
     @property
-    def filter(self):
-        return self.view.filter
-
-    @filter.setter
-    def filter(self, value):
-        self.view.filter = value
-
-    @property
-    def query(self):
-        return self.view.query
-
-    @query.setter
-    def query(self, value):
-        self.view.query = value
-
-    @property
-    def sort(self):
-        return self.view.sort
-
-    @sort.setter
-    def sort(self, value):
-        self.view.sort = value
-
-    @property
-    def mode(self):
-        return self.view.mode
-
-    @mode.setter
-    def mode(self, value):
-        self.view.mode = value
-
-    @property
-    def selected(self):
-        return self.view.selected
-
-    @selected.setter
-    def selected(self, value):
-        self.view.selected = value
-
-    @property
-    def sidebar_open(self):
-        return self.view.sidebar_open
-
-    @sidebar_open.setter
-    def sidebar_open(self, value):
-        self.view.sidebar_open = value
-
-    @property
     def _snapshot(self):
         return getattr(self._local, "snapshot", None)
 
@@ -203,7 +155,7 @@ class CenturioUI:
         return getattr(win, "height", None) or C.LIBRARY_H
 
     def _show_sidebar(self) -> bool:
-        return self.sidebar_open and self._window_width() >= C.NARROW_SIDEBAR
+        return self.view.sidebar_open and self._window_width() >= C.NARROW_SIDEBAR
 
     def _inspector_floats(self) -> bool:
         return self._window_width() < C.NARROW_INSPECTOR
@@ -337,7 +289,7 @@ class CenturioUI:
                             source_glyph=_source_glyph(app.get("source")))
 
     def _sync_search_box(self, matches: int = 0):
-        from .hotkeys import format_accel
+        from ..core.hotkeys import format_accel
         active = self.view.palette_open
         room = self._window_width() - HEADER_SIDES_W
         self.search_box.width = max(C.SEARCH_MIN_W, min(C.SEARCH_W, room))
@@ -463,14 +415,14 @@ class CenturioUI:
                                     color=C.TEXT if all_active else C.MUTED),
                             all_active, lambda: self._set_filter("all"), "Все программы"),
             self._rail_item(ft.Icon(ft.Icons.VIEW_SIDEBAR, size=18,
-                                    color=C.TEXT if self.sidebar_open else C.MUTED),
-                            self.sidebar_open, lambda: self._toggle_sidebar(),
+                                    color=C.TEXT if self.view.sidebar_open else C.MUTED),
+                            self.view.sidebar_open, lambda: self._toggle_sidebar(),
                             "Показать/скрыть панель"),
             ft.Container(width=30, height=1, bgcolor=C.LINE_2,
                          margin=ft.margin.symmetric(3, 0)),
         ]
         for cat in self.categories():
-            active = self.filter == f"category:{cat['id']}" and on_grid
+            active = self.view.filter == f"category:{cat['id']}" and on_grid
             items.append(self._rail_item(
                 Wg.cat_glyph(cat, color=C.TEXT if active else None), active,
                 lambda cid=cat["id"]: self._set_filter(f"category:{cid}"), cat["name"],
@@ -509,7 +461,7 @@ class CenturioUI:
         )
 
     def _sidebar_filter(self, icon_ctl, label, count, key, count_color=None):
-        active = self.filter == key and self.view.screen == "grid" and not self.view.active_set
+        active = self.view.filter == key and self.view.screen == "grid" and not self.view.active_set
         row = ft.Container(
             ft.Row([
                 ft.Container(icon_ctl, width=16, height=16, alignment=ft.alignment.center),
@@ -564,7 +516,7 @@ class CenturioUI:
                                      ft.Container(ft.Icon(ft.Icons.ADD, size=15,
                                                           color=C.MUTED_2),
                                                   tooltip="Собрать набор из выбранного",
-                                                  on_click=lambda e: self._new_set())],
+                                                  on_click=lambda e: self.set_ops.new_set())],
                                     vertical_alignment=ft.CrossAxisAlignment.CENTER),
                              padding=ft.padding.only(10, 0, 10, 8))]
 
@@ -624,7 +576,7 @@ class CenturioUI:
                    spacing=10),
             padding=ft.padding.symmetric(8, 10), border_radius=9,
             border=ft.border.all(1, C.BAR_BORDER),
-            on_click=lambda e: self._new_set())
+            on_click=lambda e: self.set_ops.new_set())
         return ft.DragTarget(
             group="apps", content=row,
             on_accept=lambda e, r=row: self._drop_new_set(e, r),
@@ -664,13 +616,13 @@ class CenturioUI:
         self._highlight_drop(row, False, rest)
         ids = self._dropped_ids(e)
         if ids:
-            self._add_to_set(set_id, ids)
+            self.set_ops.add_to_set(set_id, ids)
 
     def _drop_new_set(self, e, row):
         self._highlight_drop(row, False, C.BAR_BORDER)
         ids = self._dropped_ids(e)
         if ids:
-            self._make_set(ids)
+            self.set_ops.make_set(ids)
 
     def _sidebar_footer(self):
         left = T("" if self.calm() or not self.running
@@ -696,7 +648,7 @@ class CenturioUI:
                      else f"Выбрать всё в «{self._current_title()}»")
             left.append(Wg.outline_btn(label, self._select_all_visible))
         sort_btn = ft.Container(
-            ft.Row([T(queries.SORT_LABELS[self.sort], size=12.5, color=C.MUTED),
+            ft.Row([T(queries.SORT_LABELS[self.view.sort], size=12.5, color=C.MUTED),
                     ft.Icon(ft.Icons.KEYBOARD_ARROW_DOWN, size=14, color=C.MUTED_2)],
                    spacing=7),
             height=34, padding=ft.padding.symmetric(0, 12),
@@ -707,7 +659,7 @@ class CenturioUI:
         Wg.hoverable(sort_btn, None, C.SELECTED_BG)
 
         def view_btn(icon_name, m, tip):
-            active = self.mode == m
+            active = self.view.mode == m
             return ft.Container(ft.Icon(icon_name, size=13,
                                         color=C.TEXT if active else C.MUTED_2),
                                 width=34, height=34, alignment=ft.alignment.center,
@@ -770,7 +722,7 @@ class CenturioUI:
             if sec.get("cid") and sec["cid"] in self.view.collapsed \
                     and not self.view.select_mode:
                 continue
-            controls.append(self._grid(sec["apps"]) if self.mode == "grid"
+            controls.append(self._grid(sec["apps"]) if self.view.mode == "grid"
                             else self._list(sec["apps"]))
         controls.append(ft.Container(height=self._bottom_gap()))
         return controls
@@ -779,14 +731,14 @@ class CenturioUI:
         return 96 if self.view.select_mode and self.view.sel else 12
 
     def _sections(self):
-        return queries.build_sections(self.apps(), self.categories(), self.filter,
-                                      self.sort, self.running)
+        return queries.build_sections(self.apps(), self.categories(), self.view.filter,
+                                      self.view.sort, self.running)
 
     def _visible_apps(self):
         return queries.flatten_sections(self._sections())
 
     def _empty_section(self):
-        if self.filter == "hidden":
+        if self.view.filter == "hidden":
             return self._empty("Ничего не скрыто",
                                "«Скрыть» в панели массовых операций убирает плитки "
                                "отсюда, не удаляя их.", None, None)
@@ -847,7 +799,7 @@ class CenturioUI:
             border=ft.border.all(1, C.DASHED), border_radius=12,
             padding=ft.padding.all(12),
             tooltip=f"{rec['name']} · {accel}" if accel and not self.calm() else rec["name"],
-            on_click=lambda e, sid=rec["id"]: self._launch_set(sid))
+            on_click=lambda e, sid=rec["id"]: self.set_ops.launch_set(sid))
         Wg.hoverable(card, C.SET_BG, C.PANEL)
         return ft.GestureDetector(card,
                                   on_secondary_tap_down=lambda e, r=rec: self._set_menu(r, e))
@@ -1408,10 +1360,10 @@ class CenturioUI:
                                "set", self._set_submenu(ids), y), submenu=True),
                 menus.item(ft.Icons.STAR_BORDER, "В избранное",
                            lambda: self._bulk_favorite(ids)),
-                menus.item(ft.Icons.VISIBILITY if self.filter == "hidden"
+                menus.item(ft.Icons.VISIBILITY if self.view.filter == "hidden"
                            else ft.Icons.VISIBILITY_OFF,
-                           "Показать" if self.filter == "hidden" else "Скрыть из сетки",
-                           lambda: self._hide_apps(ids, self.filter != "hidden")),
+                           "Показать" if self.view.filter == "hidden" else "Скрыть из сетки",
+                           lambda: self._hide_apps(ids, self.view.filter != "hidden")),
                 menus.item(ft.Icons.DELETE_OUTLINE, f"Убрать · {len(ids)}",
                            lambda: self._remove_apps(ids), danger=True),
             ]
@@ -1434,10 +1386,10 @@ class CenturioUI:
                        lambda: self.menu.toggle_submenu("set", self._set_submenu(ids), y),
                        submenu=True),
             menus.item(ft.Icons.STAR_BORDER, "В избранное", lambda: self._bulk_favorite(ids)),
-            menus.item(ft.Icons.VISIBILITY if self.filter == "hidden"
+            menus.item(ft.Icons.VISIBILITY if self.view.filter == "hidden"
                        else ft.Icons.VISIBILITY_OFF,
-                       "Показать" if self.filter == "hidden" else "Скрыть из сетки",
-                       lambda: self._hide_apps(ids, self.filter != "hidden")),
+                       "Показать" if self.view.filter == "hidden" else "Скрыть из сетки",
+                       lambda: self._hide_apps(ids, self.view.filter != "hidden")),
             menus.separator(),
             menus.item(ft.Icons.DELETE_OUTLINE, f"Убрать · {count}",
                        lambda: self._remove_apps(ids), danger=True),
@@ -1468,15 +1420,15 @@ class CenturioUI:
         accel = self._set_accels.get(rec["id"])
         rows = [
             menus.item(ft.Icons.PLAY_ARROW, "Запустить набор",
-                       lambda: self._launch_set(rec["id"]),
+                       lambda: self.set_ops.launch_set(rec["id"]),
                        hint="" if self.calm() else (accel or "")),
         ]
         if rec.get("close_together"):
             rows.append(menus.item(ft.Icons.CLOSE, "Закрыть набор",
-                                   lambda: self.close_set_windows(rec["id"])))
+                                   lambda: self.set_ops.close_set_windows(rec["id"])))
         rows += [
             menus.item(ft.Icons.CROP_FREE, "Расставить окна",
-                       lambda: self.arrange_set(rec["id"]),
+                       lambda: self.set_ops.arrange_set(rec["id"]),
                        disabled=not queries.has_layout(rec)),
             menus.item(ft.Icons.TUNE, "Раскладка и порядок",
                        lambda: self._open_set(rec["id"])),
@@ -1485,7 +1437,7 @@ class CenturioUI:
                        lambda: self._toggle_set_quick(rec["id"], not rec.get("quick"))),
             menus.separator(),
             menus.item(ft.Icons.DELETE_OUTLINE, "Удалить набор",
-                       lambda: self._remove_set(rec["id"]), danger=True),
+                       lambda: self.set_ops.remove_set(rec["id"]), danger=True),
         ]
         self.menu.show(x, y, rows, header=menus.text_header(rec["name"]))
 
@@ -1495,28 +1447,28 @@ class CenturioUI:
         preset = rec["layout"]["preset"]
         places = [menus.item(ft.Icons.CHECK if entry.get("slot") == i else None,
                              L.slot_label(preset, i, rec["layout"]["split"]).capitalize(),
-                             lambda idx=i: self._set_item_slot(rec["id"], entry["app_id"], idx))
+                             lambda idx=i: self.set_ops.set_item_slot(rec["id"], entry["app_id"], idx))
                   for i in range(L.slot_count(preset))]
         places.append(menus.item(ft.Icons.CHECK if entry.get("slot") is None
                                  and not entry.get("minimized") else None,
-                                 "Без места", lambda: self._set_item_slot(
+                                 "Без места", lambda: self.set_ops.set_item_slot(
                                      rec["id"], entry["app_id"], None)))
         rows = [
             menus.item(ft.Icons.ARROW_UPWARD, "Запускать раньше",
-                       lambda: self._move_set_item(rec["id"], entry["app_id"], -1)),
+                       lambda: self.set_ops.move_set_item(rec["id"], entry["app_id"], -1)),
             menus.item(ft.Icons.ARROW_DOWNWARD, "Запускать позже",
-                       lambda: self._move_set_item(rec["id"], entry["app_id"], 1)),
+                       lambda: self.set_ops.move_set_item(rec["id"], entry["app_id"], 1)),
             menus.separator(),
             menus.item(ft.Icons.CROP_FREE, "Место в раскладке",
                        lambda: self.menu.toggle_submenu("slot", places, y), submenu=True),
             menus.item(ft.Icons.LAYERS_CLEAR if entry.get("minimized")
                        else ft.Icons.MINIMIZE,
                        "Открывать обычно" if entry.get("minimized") else "Запускать свёрнутым",
-                       lambda: self._set_item_minimized(rec["id"], entry["app_id"],
+                       lambda: self.set_ops.set_item_minimized(rec["id"], entry["app_id"],
                                                         not entry.get("minimized"))),
             menus.separator(),
             menus.item(ft.Icons.DELETE_OUTLINE, "Убрать из набора",
-                       lambda: self._remove_from_set(rec["id"], entry["app_id"]),
+                       lambda: self.set_ops.remove_from_set(rec["id"], entry["app_id"]),
                        danger=True),
         ]
         self.menu.show(x, y, rows,
@@ -1530,17 +1482,17 @@ class CenturioUI:
         return rows or [menus.item(None, "Категорий нет", None, disabled=True)]
 
     def _set_submenu(self, app_ids):
-        rows = [menus.item(ft.Icons.ADD, "Новый набор…", lambda: self._make_set(app_ids))]
+        rows = [menus.item(ft.Icons.ADD, "Новый набор…", lambda: self.set_ops.make_set(app_ids))]
         records = self.sets()
         if records:
             rows.append(menus.separator())
         for rec in records:
             rows.append(menus.item(ft.Icons.LAYERS, rec["name"],
-                                   lambda sid=rec["id"]: self._add_to_set(sid, app_ids)))
+                                   lambda sid=rec["id"]: self.set_ops.add_to_set(sid, app_ids)))
         return rows
 
     def _sort_submenu(self):
-        return [menus.item(ft.Icons.CHECK if self.sort == key else None,
+        return [menus.item(ft.Icons.CHECK if self.view.sort == key else None,
                            queries.SORT_LABELS[key], lambda k=key: self._set_sort(k))
                 for key in queries.SORT_KEYS]
 
@@ -1581,7 +1533,7 @@ class CenturioUI:
         x, y = self._menu_at(e)
         rows = [menus.item(ft.Icons.CHECK if rec["layout"]["preset"] == key else None,
                            L.PRESET_LABELS[key],
-                           lambda k=key: self.set_layout_preset(rec["id"], k))
+                           lambda k=key: self.set_ops.set_layout_preset(rec["id"], k))
                 for key in L.PRESETS]
         self.menu.show(x, y, rows, header=menus.text_header("Раскладка"))
 
@@ -1590,7 +1542,7 @@ class CenturioUI:
         count = max(1, len(W.monitors()))
         rows = [menus.item(ft.Icons.CHECK if rec["monitor"] == i else None,
                            f"Монитор {i + 1}",
-                           lambda idx=i: self.set_set_monitor(rec["id"], idx))
+                           lambda idx=i: self.set_ops.set_set_monitor(rec["id"], idx))
                 for i in range(count)]
         self.menu.show(x, y, rows, header=menus.text_header("Куда расставлять"))
 
@@ -1598,7 +1550,7 @@ class CenturioUI:
         x, y = self._menu_at(e)
         rows = [menus.item(ft.Icons.CHECK if abs(rec["delay_seconds"] - value) < 0.01 else None,
                            "без паузы" if not value else f"{value:g} с",
-                           lambda v=value: self.set_set_delay(rec["id"], v))
+                           lambda v=value: self.set_ops.set_set_delay(rec["id"], v))
                 for value in (0, 1, 2, 4, 8)]
         self.menu.show(x, y, rows, header=menus.text_header("Пауза между запусками"))
 
@@ -1652,7 +1604,7 @@ class CenturioUI:
             return
         row = rows[min(self.view.palette_index, len(rows) - 1)]
         if row["kind"] == "set":
-            self._launch_set(row["set"]["id"], from_palette=True)
+            self.set_ops.launch_set(row["set"]["id"], from_palette=True)
         else:
             self._launch(row["app"]["id"], from_palette=True, as_admin=admin)
 
@@ -1670,7 +1622,7 @@ class CenturioUI:
         elif key == "Delete" and self.view.sel:
             self._remove_apps(list(self.view.sel))
         elif e.ctrl and key in ("Enter", "Numpad Enter") and self.view.screen == "add":
-            self.commit_add()
+            self.scan.commit_add()
         elif key in ("Arrow Right", "Arrow Down"):
             self.move_selection(1)
         elif key in ("Arrow Left", "Arrow Up"):
@@ -1687,17 +1639,17 @@ class CenturioUI:
         if key in ("1", "2", "3", "4"):
             index = int(key) - 1
             if index < len(picks):
-                self.triage_place(item["id"], picks[index]["id"])
+                self.triage.triage_place(item["id"], picks[index]["id"])
             return True
         if key in ("Enter", "Numpad Enter"):
             if picks:
-                self.triage_place(item["id"], picks[0]["id"])
+                self.triage.triage_place(item["id"], picks[0]["id"])
             return True
         if key == "Arrow Right":
-            self.triage_skip(item["id"])
+            self.triage.triage_skip(item["id"])
             return True
         if key == "Delete":
-            self.triage_drop(item["id"])
+            self.triage.triage_drop(item["id"])
             return True
         return False
 
@@ -1729,15 +1681,15 @@ class CenturioUI:
         if self.view.inspector:
             return self.view.inspector
         flat = self._flat_apps(sections)
-        if 0 <= self.selected < len(flat):
-            return flat[self.selected]["id"]
+        if 0 <= self.view.selected < len(flat):
+            return flat[self.view.selected]["id"]
         return None
 
     def move_selection(self, delta):
         with self._refresh_lock:
             flat = self._flat_apps()
             if not flat:
-                self.selected = -1
+                self.view.selected = -1
                 return
             self.view.move_selection(delta, len(flat))
             self.refresh()
@@ -1747,7 +1699,7 @@ class CenturioUI:
             flat = self._flat_apps()
             if not flat:
                 return
-            idx = self.selected if 0 <= self.selected < len(flat) else 0
+            idx = self.view.selected if 0 <= self.view.selected < len(flat) else 0
         self._launch(flat[idx]["id"])
 
     def _focus(self, field):
@@ -1929,18 +1881,6 @@ class CenturioUI:
                          action_label="Найти" if missing else None)
         self.refresh()
 
-    def _launch_set(self, set_id, from_palette: bool = False):
-        self.set_ops.launch_set(set_id, from_palette=from_palette)
-
-    def arrange_set(self, set_id, quiet: bool = False):
-        self.set_ops.arrange_set(set_id, quiet=quiet)
-
-    def close_set_windows(self, set_id):
-        self.set_ops.close_set_windows(set_id)
-
-    def capture_set_layout(self, set_id):
-        self.set_ops.capture_set_layout(set_id)
-
     def _after_launch(self, from_palette: bool = False):
         if from_palette:
             self.view.close_palette()
@@ -1951,7 +1891,7 @@ class CenturioUI:
 
     def _relocate(self, app_id):
         self._relocating = app_id
-        self.pick_file()
+        self.scan.pick_file()
 
     def run_palette_action(self, key: str):
         app = self._palette_app()
@@ -1970,7 +1910,7 @@ class CenturioUI:
 
     def palette_click(self, row):
         if row["kind"] == "set":
-            self._launch_set(row["set"]["id"], from_palette=True)
+            self.set_ops.launch_set(row["set"]["id"], from_palette=True)
         else:
             self._launch(row["app"]["id"], from_palette=True)
 
@@ -2096,63 +2036,12 @@ class CenturioUI:
         self.store.update_apps(ids, {"favorite": False})
         self.refresh()
 
-    def _new_set(self):
-        self.set_ops.new_set()
-
-    def _make_set(self, ids):
-        self.set_ops.make_set(ids)
-
-    def _add_to_set(self, set_id, app_ids):
-        self.set_ops.add_to_set(set_id, app_ids)
-
-    def _remove_from_set(self, set_id, app_id):
-        self.set_ops.remove_from_set(set_id, app_id)
-
-    def _restore_set_members(self, set_id, members):
-        self.set_ops.restore_set_members(set_id, members)
-
-    def _undo_set(self, set_id):
-        self.set_ops.undo_set(set_id)
-
-    def _remove_set(self, set_id):
-        self.set_ops.remove_set(set_id)
-
-    def _restore_set(self, rec):
-        self.set_ops.restore_set(rec)
-
-    def rename_set(self, set_id, name):
-        self.set_ops.rename_set(set_id, name)
-
-    def set_layout_preset(self, set_id, preset):
-        self.set_ops.set_layout_preset(set_id, preset)
-
-    def set_layout_split(self, set_id, key, value):
-        self.set_ops.set_layout_split(set_id, key, value)
-
-    def set_set_delay(self, set_id, seconds):
-        self.set_ops.set_set_delay(set_id, seconds)
-
-    def set_set_monitor(self, set_id, index):
-        self.set_ops.set_set_monitor(set_id, index)
-
-    def set_close_together(self, set_id, value):
-        self.set_ops.set_close_together(set_id, value)
-
-    def _set_item_slot(self, set_id, app_id, slot):
-        self.set_ops.set_item_slot(set_id, app_id, slot)
-
-    def _set_item_minimized(self, set_id, app_id, value):
-        self.set_ops.set_item_minimized(set_id, app_id, value)
-
-    def _move_set_item(self, set_id, app_id, delta):
-        self.set_ops.move_set_item(set_id, app_id, delta)
-
     def add_to_set_picker(self, set_id, e=None):
         rec = self.store.get_set(set_id)
         if not rec:
             return
         inside = set(rec["apps"])
-        rows = [menus.item(None, a["name"], lambda aid=a["id"]: self._add_to_set(set_id, [aid]))
+        rows = [menus.item(None, a["name"], lambda aid=a["id"]: self.set_ops.add_to_set(set_id, [aid]))
                 for a in sorted(queries.visible(self.apps()), key=lambda a: a["name"].lower())
                 if a["id"] not in inside]
         if not rows:
@@ -2275,7 +2164,7 @@ class CenturioUI:
     def _open_add(self):
         self.view.set_screen("add")
         self.view.reset_add()
-        self.start_scan()
+        self.scan.start_scan()
         self.refresh()
 
     def _open_settings(self):
@@ -2363,79 +2252,10 @@ class CenturioUI:
             cb()
 
     def _current_title(self):
-        return queries.current_title(self.filter, self.categories())
+        return queries.current_title(self.view.filter, self.categories())
 
     def icon_cache_dir(self) -> str:
         return str(Path(self.store.path).parent / "icons")
-
-    def cached_discovery(self):
-        return self.scan.cached_discovery()
-
-    def scanning(self) -> bool:
-        return self.scan.scanning()
-
-    def scan_errors(self) -> list[dict]:
-        return self.scan.scan_errors()
-
-    def start_scan(self, force: bool = False):
-        self.scan.start_scan(force=force)
-
-    def dismiss_scan_errors(self):
-        self.scan.dismiss_scan_errors()
-
-    def found_groups(self):
-        return self.scan.found_groups()
-
-    def toggle_only_new(self):
-        self.scan.toggle_only_new()
-
-    def set_add_query(self, text):
-        self.scan.set_add_query(text)
-
-    def set_manual_path(self, text):
-        self.scan.set_manual_path(text)
-
-    def add_manual_path(self, text=None):
-        self.scan.add_manual_path(text)
-
-    def toggle_add_row(self, row):
-        self.scan.toggle_add_row(row)
-
-    def toggle_add_group(self, group):
-        self.scan.toggle_add_group(group)
-
-    def cycle_add_category(self, row):
-        self.scan.cycle_add_category(row)
-
-    def add_category_for(self, row) -> str | None:
-        return self.scan.add_category_for(row)
-
-    def commit_add(self):
-        self.scan.commit_add()
-
-    def defer_add(self):
-        self.scan.defer_add()
-
-    def pick_file(self):
-        self.scan.pick_file()
-
-    def _backfill_icons_async(self):
-        self.scan.backfill_icons_async()
-
-    def rescan(self, silent: bool = False):
-        self.scan.rescan(silent=silent)
-
-    def triage_place(self, item_id, cat_id):
-        self.triage.triage_place(item_id, cat_id)
-
-    def triage_skip(self, item_id):
-        self.triage.triage_skip(item_id)
-
-    def triage_drop(self, item_id):
-        self.triage.triage_drop(item_id)
-
-    def triage_defer_all(self):
-        self.triage.triage_defer_all()
 
     def maybe_onboard(self):
         if self.setting("onboarded") or self.apps():
@@ -2445,7 +2265,7 @@ class CenturioUI:
     def show_onboarding(self):
         self.view.onboarding = True
         self.view.onboarding_sel = set()
-        self.start_scan()
+        self.scan.start_scan()
         self.refresh()
 
     def close_onboarding(self):
@@ -2453,8 +2273,8 @@ class CenturioUI:
         self.set_setting("onboarded", True)
 
     def onboarding_items(self):
-        from . import discovery
-        found = self.cached_discovery()
+        from ..platform import discovery
+        found = self.scan.cached_discovery()
         if found is None:
             return []
         existing = {(a.get("path") or "").lower() for a in self.apps()}
@@ -2488,7 +2308,7 @@ class CenturioUI:
         self.store.set_setting("onboarded", True)
         self.toast.show(f"Готово — {len(chosen)} {plu_programs(len(chosen))} в быстром запуске")
         self._on_library_changed()
-        self._backfill_icons_async()
+        self.scan.backfill_icons_async()
 
     def _render_popover(self):
         cat_id = self.view.popover
@@ -2559,7 +2379,7 @@ class CenturioUI:
             return
         self.store.update_apps([a["id"] for a in self.apps()], {"icon": None, "poster": None})
         self.toast.show(f"Кэш очищен, файлов удалено: {removed}")
-        self._backfill_icons_async()
+        self.scan.backfill_icons_async()
         self.refresh()
 
 

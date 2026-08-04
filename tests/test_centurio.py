@@ -1919,7 +1919,7 @@ def test_ui_inbox_badge_and_triage():
         ui.handle_key(_key("Enter"))
         ok(len(store.state()["apps"]) == 1, "Enter takes the suggestion")
 
-        ui.triage_defer_all()
+        ui.triage.triage_defer_all()
         ok(not store.state()["inbox"], "«Отложить всё» empties the queue")
         ok(ui.view.screen == "grid", "and goes back to the library")
         ui.toast.fire_action()
@@ -2128,7 +2128,7 @@ def test_ui_sets():
                for n in ("VS Code", "Notion")]
         ui, page = _ui_for(store)
 
-        ui._make_set(ids)
+        ui.set_ops.make_set(ids)
         rec = store.state()["sets"][0]
         ok(rec["name"] == "VS Code и Notion", "a set is named after what is in it")
         ok(rec["quick"] is True, "and lands in the quick-launch strip")
@@ -2152,7 +2152,7 @@ def test_ui_sets():
         ui.launcher.launch.return_value = {"ok": True, "running": True}
         ui.launcher.running_ids.return_value = ids
         before = set(__import__("threading").enumerate())
-        ui._launch_set(rec["id"])
+        ui.set_ops.launch_set(rec["id"])
         ok(_settle_threads(before), "running a set finishes off the UI thread")
         ok(ui.launcher.launch.call_count == 2, "having started everything in it")
 
@@ -2160,28 +2160,28 @@ def test_ui_sets():
         ui.launcher.launch.reset_mock()
         before = set(__import__("threading").enumerate())
         started_at = time.time()
-        ui._launch_set(rec["id"])
+        ui.set_ops.launch_set(rec["id"])
         ok(time.time() - started_at < 0.2, "the call itself returns at once")
         ok(_settle_threads(before, timeout=6), "and the run finishes on its own")
         ok(time.time() - started_at >= 0.2,
            "having actually waited the pause between the two programs")
 
         third = store.add_app({"name": "Figma", "path": "/x/f", "category_id": "work"})["id"]
-        ui._add_to_set(rec["id"], [third])
+        ui.set_ops.add_to_set(rec["id"], [third])
         ok(len(store.get_set(rec["id"])["apps"]) == 3, "a program can be added to a set")
         ok(store.get_set(rec["id"])["items"][2]["slot"] == 2,
            "and takes the first free place in the layout")
         ui.toast.fire_action()
         ok(len(store.get_set(rec["id"])["apps"]) == 2, "and that is undoable")
 
-        ui._set_item_minimized(rec["id"], ids[1], True)
+        ui.set_ops.set_item_minimized(rec["id"], ids[1], True)
         entry = store.get_set(rec["id"])["items"][1]
         ok(entry["minimized"] is True and entry["slot"] is None,
            "a member can start minimised, and then it has no place")
         ok("свёрнутым" in _texts(ft.Column(ui.content_col.controls)) or True,
            "which the screen says out loud")
 
-        ui._move_set_item(rec["id"], ids[1], -1)
+        ui.set_ops.move_set_item(rec["id"], ids[1], -1)
         ok(store.get_set(rec["id"])["apps"][0] == ids[1],
            "the launch order can be rearranged")
 
@@ -2193,12 +2193,12 @@ def test_ui_sets():
            "dropping one row on another moves it in front of it")
         page.get_control = lambda _id: None
 
-        ui._remove_from_set(rec["id"], ids[1])
+        ui.set_ops.remove_from_set(rec["id"], ids[1])
         ok(store.get_set(rec["id"])["apps"] == [ids[0]], "a member can be removed")
         ui.toast.fire_action()
         ok(len(store.get_set(rec["id"])["apps"]) == 2, "and put back")
 
-        ui._remove_set(rec["id"])
+        ui.set_ops.remove_set(rec["id"])
         ok(not store.state()["sets"], "a set can be removed")
         ui.toast.fire_action()
         ok(len(store.state()["sets"]) == 1, "and restored")
@@ -2352,7 +2352,7 @@ def test_ui_quick_numbers_match_the_hotkeys():
         ids = [store.add_app({"name": n, "path": f"/x/{n}", "quick": True})["id"]
                for n in ("Notion", "Figma")]
         ui, _ = _ui_for(store)
-        ui._make_set(ids)          # goes into the strip, ahead of both cards
+        ui.set_ops.make_set(ids)          # goes into the strip, ahead of both cards
         ui.refresh()
 
         from app.core.hotkeys import free_quick_slot, quick_accels
@@ -2413,42 +2413,42 @@ def test_ui_add_screen():
             ok(ui.view.screen == "add", "«Найти и добавить» is a screen, not a dialog")
             ok(not ui.toolbar_holder.visible, "which takes over the toolbar's space")
 
-            groups = ui.found_groups()
+            groups = ui.scan.found_groups()
             ok([g["source"] for g in groups] == ["steam", "startmenu"],
                "results are grouped by where they came from")
             ok(all(r["is_new"] for g in groups for r in g["rows"]),
                "«Только новые» is on by default")
 
-            ui.toggle_only_new()
-            names = [r["name"] for g in ui.found_groups() for r in g["rows"]]
+            ui.scan.toggle_only_new()
+            names = [r["name"] for g in ui.scan.found_groups() for r in g["rows"]]
             ok("Notion" in names, "turning it off shows what is already there")
 
-            rows = {r["name"]: r for g in ui.found_groups() for r in g["rows"]}
-            ok(ui.add_category_for(rows["Elden Ring"]) == "games",
+            rows = {r["name"]: r for g in ui.scan.found_groups() for r in g["rows"]}
+            ok(ui.scan.add_category_for(rows["Elden Ring"]) == "games",
                "a Steam game is proposed for «Игры»")
-            ui.cycle_add_category(rows["Elden Ring"])
-            ok(ui.add_category_for(rows["Elden Ring"]) != "games",
+            ui.scan.cycle_add_category(rows["Elden Ring"])
+            ok(ui.scan.add_category_for(rows["Elden Ring"]) != "games",
                "and the proposal can be overridden in the row")
 
-            ui.toggle_add_row(rows["Notion"])
+            ui.scan.toggle_add_row(rows["Notion"])
             ok(not ui.view.add_sel, "an app already in the library can't be ticked")
 
             # Поле пути: вторая дорога в тот же список.
             fake_exe = os.path.join(d, "MyApp.exe")
             with open(fake_exe, "w") as fh:
                 fh.write("x")
-            ui.add_manual_path(fake_exe)
-            manual = [g for g in ui.found_groups() if g["source"] == "manual"]
+            ui.scan.add_manual_path(fake_exe)
+            manual = [g for g in ui.scan.found_groups() if g["source"] == "manual"]
             ok(manual and manual[0]["rows"][0]["name"] == "MyApp",
                "a pasted path shows up in its own «Вручную» group")
             ok(fake_exe.lower() in ui.view.add_sel, "already ticked, since it was asked for")
 
-            ui.add_manual_path("/no/such/file.exe")
+            ui.scan.add_manual_path("/no/such/file.exe")
             ok(ui.toast.icon.color == C.DANGER, "a path that isn't there is refused")
 
             ui.view.reset_add()
-            ui.toggle_add_row(rows["Elden Ring"])
-            ui.defer_add()
+            ui.scan.toggle_add_row(rows["Elden Ring"])
+            ui.scan.defer_add()
             ok(len(store.state()["inbox"]) == 1, "«Отложить в разбор» queues instead of adding")
             ok(not store.state()["apps"] or len(store.state()["apps"]) == 1,
                "and nothing new landed in the library")
@@ -2456,9 +2456,9 @@ def test_ui_add_screen():
 
             ui._open_add()
             ui.view.reset_add()
-            rows = {r["name"]: r for g in ui.found_groups() for r in g["rows"]}
-            ui.toggle_add_row(rows["Elden Ring"])
-            ui.commit_add()
+            rows = {r["name"]: r for g in ui.scan.found_groups() for r in g["rows"]}
+            ui.scan.toggle_add_row(rows["Elden Ring"])
+            ui.scan.commit_add()
             ok(_settle_threads(before), "the post-add icon pass finishes")
             ok("Elden Ring" in [a["name"] for a in store.state()["apps"]],
                "committing adds the ticked programs")
@@ -2497,7 +2497,7 @@ def test_ui_scanning_is_just_a_spinner():
             ui._open_add()
 
             deadline = time.time() + 3
-            while not ui.scanning() and time.time() < deadline:
+            while not ui.scan.scanning() and time.time() < deadline:
                 time.sleep(0.01)
             ui.refresh()
             shown = _texts(ui.content_col.controls[0])
@@ -3267,7 +3267,7 @@ def test_ui_background_rescan():
                                    [{"name": "Fresh", "path": "C:/fresh.exe",
                                      "source": "startmenu"}])
         try:
-            ui.rescan(silent=True)
+            ui.scan.rescan(silent=True)
             ok(_settle_threads(before), "the silent rescan finishes")
             ok(refreshes == [False],
                "a silent rescan only fills gaps, it doesn't re-resolve every icon")
@@ -3278,7 +3278,7 @@ def test_ui_background_rescan():
 
             store.clear_inbox()
             store.set_setting("triage", False)
-            ui.rescan()
+            ui.scan.rescan()
             ok(_settle_threads(before), "the explicit rescan finishes")
             ok(refreshes == [False, True],
                "an explicit rescan still forces the full icon refresh")
@@ -3312,17 +3312,17 @@ def test_ui_discovery_reuse():
             store = Store(os.path.join(d, "data.json"))
             ui, _ = _ui_for(store)
 
-            ui.start_scan()
+            ui.scan.start_scan()
             ok(_settle_threads(before), "the first scan finishes")
             ok(scans["n"] == 1, "opening the add screen with nothing cached scans once")
-            ok(ui.cached_discovery() is not None, "the result is cached")
+            ok(ui.scan.cached_discovery() is not None, "the result is cached")
 
-            ui.start_scan()
+            ui.scan.start_scan()
             ok(_settle_threads(before), "the second open settles")
             ok(scans["n"] == 1, "a cached result is reused instead of rescanning")
 
             ui.scan._discovered_at -= 200
-            ok(ui.cached_discovery() is None, "a stale result is not reused")
+            ok(ui.scan.cached_discovery() is None, "a stale result is not reused")
     finally:
         discovery.discover_apps = real_discover
         _settle_threads(before)

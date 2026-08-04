@@ -30,20 +30,22 @@ def setup(debug: bool | None = None, log_dir: str | Path | None = None) -> loggi
     _LOGGER.setLevel(logging.DEBUG if debug else logging.WARNING)
     fmt = logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s")
 
+    try:
+        d = Path(log_dir) if log_dir else _default_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        fh = RotatingFileHandler(d / "centurio.log", maxBytes=512 * 1024,
+                                 backupCount=3, encoding="utf-8")
+        fh.setFormatter(fmt)
+        _LOGGER.addHandler(fh)
+    except Exception:
+        pass
+
     if debug:
-        try:
-            d = Path(log_dir) if log_dir else _default_dir()
-            d.mkdir(parents=True, exist_ok=True)
-            fh = RotatingFileHandler(d / "centurio.log", maxBytes=512 * 1024,
-                                     backupCount=3, encoding="utf-8")
-            fh.setFormatter(fmt)
-            _LOGGER.addHandler(fh)
-        except Exception:
-            pass
         sh = logging.StreamHandler()
         sh.setFormatter(fmt)
         _LOGGER.addHandler(sh)
-        _LOGGER.debug("logging started (log dir: %s)", log_dir or "<default>")
+
+    _LOGGER.debug("logging started (log dir: %s)", log_dir or "<default>")
 
     _configured = True
     return _LOGGER
