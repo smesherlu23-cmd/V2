@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import threading
+import time
 
 from ..infra import log
 
@@ -229,12 +230,78 @@ _STEAM_EXE_JUNK = ("unins", "uninstall", "vcredist", "vc_redist", "dxsetup", "dx
                    "prereq", "activation", "diagnostic", "helper", "reporter")
 
 
-def _steam_game_exe(lib: str, installdir: str | None, name: str) -> str | None:
+_STEAM_EXE_CACHE_NAME = "steam-exe.json"
+_exe_cache_lock = threading.Lock()
+
+
+def _steam_exe_cache_path(icon_cache: str | None) -> str | None:
+    return os.path.join(icon_cache, _STEAM_EXE_CACHE_NAME) if icon_cache else None
+
+
+def _steam_exe_cache_read(icon_cache: str | None) -> dict:
+    path = _steam_exe_cache_path(icon_cache)
+    if not path:
+        return {}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _steam_exe_cached(icon_cache: str | None, appid: str, root: str) -> str | None:
+    with _exe_cache_lock:
+        entry = _steam_exe_cache_read(icon_cache).get(str(appid))
+    if not isinstance(entry, dict):
+        return None
+    exe = entry.get("exe")
+    if not isinstance(exe, str) or not exe:
+        return None
+    if entry.get("root") != root:
+        return None
+    return exe
+
+
+def _steam_exe_remember(icon_cache: str | None, appid: str, root: str, exe: str) -> None:
+    path = _steam_exe_cache_path(icon_cache)
+    if not path or not exe:
+        return
+    with _exe_cache_lock:
+        data = _steam_exe_cache_read(icon_cache)
+        data[str(appid)] = {"exe": exe, "root": root}
+        try:
+            os.makedirs(icon_cache, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, ensure_ascii=False)
+        except OSError:
+            log.exception("не удалось сохранить кэш путей Steam: %s", path)
+
+
+def reset_steam_exe_cache(icon_cache: str | None) -> None:
+    path = _steam_exe_cache_path(icon_cache)
+    if not path:
+        return
+    with _exe_cache_lock:
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            log.exception("не удалось очистить кэш путей Steam: %s", path)
+
+
+def _steam_game_exe(lib: str, installdir: str | None, name: str,
+                    icon_cache: str | None = None, appid: str | None = None) -> str | None:
     if not installdir:
         return None
     root = os.path.join(lib, "steamapps", "common", installdir)
     if not os.path.isdir(root):
         return None
+    if appid:
+        cached = _steam_exe_cached(icon_cache, appid, root)
+        if cached:
+            return cached
     candidates: list[tuple[int, str, str]] = []
     seen = 0
     for dirpath, _dirs, files in os.walk(root):
@@ -257,13 +324,19 @@ def _steam_game_exe(lib: str, installdir: str | None, name: str) -> str | None:
     if not candidates:
         return None
     tokens = [t for t in re.split(r"[^a-z0-9]+", name.lower()) if len(t) >= 3]
+    found = None
     for _size, fn, low in sorted(candidates, key=lambda c: -c[0]):
         if any(t in low for t in tokens):
-            return fn
-    return max(candidates, key=lambda c: c[0])[1]
+            found = fn
+            break
+    if found is None:
+        found = max(candidates, key=lambda c: c[0])[1]
+    if appid and found:
+        _steam_exe_remember(icon_cache, appid, root, found)
+    return found
 
 
-def steam_exe_for(path: str) -> str | None:
+def steam_exe_for(path: str, icon_cache: str | None = None) -> str | None:
     m = re.match(r"steam://rungameid/(\d+)", path or "")
     if not m or os.name != "nt":
         return None
@@ -276,7 +349,8 @@ def steam_exe_for(path: str) -> str | None:
                     text = fh.read()
             except OSError:
                 continue
-            exe = _steam_game_exe(lib, _vdf_val(text, "installdir"), _vdf_val(text, "name") or "")
+            exe = _steam_game_exe(lib, _vdf_val(text, "installdir"),
+                                  _vdf_val(text, "name") or "", icon_cache, appid)
             if exe:
                 return exe
     return None
@@ -515,7 +589,8 @@ def _steam_games(icon_cache: str | None) -> list[dict]:
                 seen.add(appid)
                 icon, fit = _steam_icon(root, appid, icon_cache)
                 poster = _steam_portrait(root, appid, icon_cache)
-                track = (_steam_game_exe(lib, _vdf_val(text, "installdir"), name)
+                track = (_steam_game_exe(lib, _vdf_val(text, "installdir"), name,
+                                         icon_cache, appid)
                          if os.name == "nt" else None)
                 games.append({"name": name, "path": f"steam://rungameid/{appid}",
                               "icon": icon, "icon_fit": fit, "source": "steam",
@@ -676,6 +751,53 @@ def resolve_icon_for(path: str, icon_cache: str | None = None) -> tuple[str | No
         log.exception("resolve_icon_for failed for %s", path)
     return None, "contain"
 
+PRUNE_MIN_AGE_DAYS = 14.0
+
+
+def _norm_path(value) -> str:
+    if not isinstance(value, str) or not value:
+        return ""
+    try:
+        return os.path.normcase(os.path.abspath(value))
+    except (OSError, ValueError):
+        return ""
+
+
+def prune_icon_cache(store, icon_cache: str | None = None,
+                     min_age_days: float = PRUNE_MIN_AGE_DAYS) -> int:
+    if not icon_cache or not os.path.isdir(icon_cache):
+        return 0
+    state = store.state()
+    keep = {_norm_path(_steam_exe_cache_path(icon_cache))}
+    for records, fields in ((state.get("apps") or [], ("icon", "poster")),
+                            (state.get("inbox") or [], ("icon", "poster")),
+                            (state.get("categories") or [], ("image",))):
+        for rec in records:
+            if not isinstance(rec, dict):
+                continue
+            for field in fields:
+                keep.add(_norm_path(rec.get(field)))
+    keep.discard("")
+
+    cutoff = time.time() - max(0.0, min_age_days) * 86400
+    removed = 0
+    for root, _dirs, files in os.walk(icon_cache):
+        for name in files:
+            full = os.path.join(root, name)
+            if _norm_path(full) in keep:
+                continue
+            try:
+                if os.path.getmtime(full) > cutoff:
+                    continue
+                os.unlink(full)
+            except OSError:
+                continue
+            removed += 1
+    if removed:
+        log.info("кэш иконок: удалено осиротевших файлов: %d", removed)
+    return removed
+
+
 ICON_SCHEMA = 7
 
 
@@ -695,7 +817,7 @@ def backfill_icons(store, icon_cache: str | None = None, refresh: bool = False) 
             elif path.startswith("com.epicgames.launcher://"):
                 patch["sub"] = "Epic Games"
         if path.startswith("steam://") and not (app.get("track_exe") or "").strip():
-            exe = steam_exe_for(path)
+            exe = steam_exe_for(path, icon_cache)
             if exe:
                 patch["track_exe"] = exe
         if path.startswith("steam://") and (refresh or not app.get("poster")):

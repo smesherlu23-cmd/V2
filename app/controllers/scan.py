@@ -61,6 +61,7 @@ class ScanController:
             try:
                 if force:
                     discovery.reset_cdn_state()
+                    discovery.reset_steam_exe_cache(self.ui.icon_cache_dir())
                 found = discovery.discover_apps(self.ui.icon_cache_dir(), report=report)
                 self._remember_discovery(found)
                 errors = report.get("errors") or []
@@ -269,9 +270,14 @@ class ScanController:
                 cache = self.ui.icon_cache_dir()
                 if not silent:
                     discovery.reset_cdn_state()
+                    discovery.reset_steam_exe_cache(cache)
                 changed = discovery.backfill_icons(self.store, cache, refresh=not silent)
                 found = discovery.discover_apps(cache)
                 self._remember_discovery(found)
+                try:
+                    discovery.prune_icon_cache(self.store, cache)
+                except Exception:
+                    log.exception("не удалось прибрать кэш иконок")
                 existing = {(a.get("path") or "").lower() for a in self.store.state()["apps"]}
                 new = [a for a in found if (a.get("path") or "").lower() not in existing]
                 if new and self.store.state()["settings"].get("triage", True):

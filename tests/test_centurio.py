@@ -1866,6 +1866,101 @@ def test_ui_matches_the_design_sizes():
         ok(_sized(board, None, 44), "and «Добавить программу» is 44")
 
 
+def test_process_monitor_backs_off():
+    """Монитор процессов молчит без цели и растягивает интервал в трее."""
+    from app.infra import procs
+    from app.platform.launcher import Launcher
+
+    calls = []
+    real = procs.snapshot
+    procs.snapshot = lambda max_age=2.0: (calls.append(1), {1: "tracked.exe"})[1]
+    monitor = Launcher()
+    try:
+        monitor.start_monitor(interval=0.05, idle_interval=5.0)
+        time.sleep(0.3)
+        ok(not calls, "nothing tracked means the process list is never read")
+
+        monitor.set_apps([{"id": "a", "path": "C:/tracked.exe", "track_exe": "tracked.exe"}])
+        time.sleep(0.3)
+        ok(bool(calls), "adding a tracked app wakes the monitor instead of waiting it out")
+        ok("a" in monitor.running_ids(), "and the running app is recognised")
+
+        monitor.set_background(True)
+        time.sleep(0.1)
+        idle_mark = len(calls)
+        time.sleep(0.4)
+        ok(len(calls) == idle_mark, "in the tray the interval stretches out")
+
+        monitor.set_background(False)
+        time.sleep(0.15)
+        ok(len(calls) > idle_mark, "showing the window polls again at once")
+    finally:
+        monitor.stop_monitor()
+        procs.snapshot = real
+
+
+def test_steam_exe_lookup_is_cached():
+    """Папка игры обходится один раз, дальше берётся из кэша."""
+    from app.platform import discovery
+
+    with tempfile.TemporaryDirectory() as d:
+        lib = os.path.join(d, "lib")
+        root = os.path.join(lib, "steamapps", "common", "MyGame")
+        os.makedirs(root)
+        with open(os.path.join(root, "MyGame.exe"), "wb") as fh:
+            fh.write(b"x" * 5000)
+        cache = os.path.join(d, "icons")
+        os.makedirs(cache)
+
+        walks = []
+        real_walk = discovery.os.walk
+
+        def counting_walk(*a, **kw):
+            walks.append(1)
+            return real_walk(*a, **kw)
+
+        discovery.os.walk = counting_walk
+        try:
+            first = discovery._steam_game_exe(lib, "MyGame", "My Game", cache, "12345")
+            walked = len(walks)
+            second = discovery._steam_game_exe(lib, "MyGame", "My Game", cache, "12345")
+            ok(first == "MyGame.exe", "the game executable is found by walking once")
+            ok(second == first, "the cached answer matches")
+            ok(len(walks) == walked, "and the second lookup does not walk the folder")
+
+            discovery.reset_steam_exe_cache(cache)
+            discovery._steam_game_exe(lib, "MyGame", "My Game", cache, "12345")
+            ok(len(walks) > walked, "a forced rescan walks again")
+        finally:
+            discovery.os.walk = real_walk
+
+
+def test_icon_cache_pruning():
+    """Осиротевшие файлы кэша удаляются, нужные и свежие — нет."""
+    from app.platform import discovery
+
+    with tempfile.TemporaryDirectory() as d:
+        store = Store(os.path.join(d, "data.json"))
+        cache = os.path.join(d, "icons")
+        os.makedirs(cache)
+        used = os.path.join(cache, "used.png")
+        orphan = os.path.join(cache, "orphan.png")
+        fresh = os.path.join(cache, "fresh.png")
+        for path in (used, orphan, fresh):
+            with open(path, "wb") as fh:
+                fh.write(b"x")
+        old = time.time() - 30 * 86400
+        os.utime(used, (old, old))
+        os.utime(orphan, (old, old))
+        store.add_app({"name": "A", "path": "/bin/a", "icon": used})
+
+        removed = discovery.prune_icon_cache(store, cache)
+        ok(os.path.exists(used), "a file an app still points at survives")
+        ok(not os.path.exists(orphan), "an old unreferenced file is removed")
+        ok(os.path.exists(fresh), "a recent file is kept — it may belong to a pending add")
+        ok(removed == 1, "the removal count is reported")
+
+
 def test_ui_tile_cache():
     """Плитки переиспользуются, пока их вид не изменился."""
     try:
@@ -3468,6 +3563,9 @@ if __name__ == "__main__":
     test_ui_text_stays_inside_the_bundled_fonts()
     test_ui_single_screen_layout()
     test_ui_matches_the_design_sizes()
+    test_process_monitor_backs_off()
+    test_steam_exe_lookup_is_cached()
+    test_icon_cache_pruning()
     test_ui_tile_cache()
     test_ui_skips_work_while_hidden()
     test_ui_inbox_badge_and_triage()

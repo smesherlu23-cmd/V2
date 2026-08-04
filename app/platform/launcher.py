@@ -22,6 +22,8 @@ class Launcher:
         self._last_emit: frozenset[str] = frozenset()
         self._lock = threading.Lock()
         self._monitor_stop = None
+        self._background = False
+        self._wake = threading.Event()
         self.on_change = on_change
 
     def running_ids(self) -> list[str]:
@@ -59,11 +61,23 @@ class Launcher:
             for base in names:
                 index.setdefault(base, set()).add(a["id"])
         with self._lock:
+            was_idle = not self._exe_index
             self._exe_index = index
+        if index and was_idle:
+            self._wake.set()
 
-    def start_monitor(self, interval: float = 4.0):
+    def set_background(self, background: bool):
+        background = bool(background)
+        with self._lock:
+            if background == self._background:
+                return
+            self._background = background
+        if not background:
+            self._wake.set()
+
+    def start_monitor(self, interval: float = 4.0, idle_interval: float = 25.0):
         try:
-            import psutil  
+            import psutil
         except Exception:
             return False
         with self._lock:
@@ -74,18 +88,27 @@ class Launcher:
 
         def loop():
             while not stop.is_set():
+                self._wake.clear()
+                tracked, background = True, False
                 try:
-                    names = set(procs.snapshot().values())
                     with self._lock:
-                        matched = set()
-                        for base, ids in self._exe_index.items():
-                            if base in names:
-                                matched |= ids
-                        self._name_ids = matched
-                    self._emit()
+                        tracked = bool(self._exe_index)
+                        background = self._background
+                    if tracked:
+                        names = set(procs.snapshot().values())
+                        with self._lock:
+                            matched = set()
+                            for base, ids in self._exe_index.items():
+                                if base in names:
+                                    matched |= ids
+                            self._name_ids = matched
+                        self._emit()
                 except Exception:
                     log.exception("process monitor iteration failed")
-                stop.wait(interval)
+                delay = interval if tracked else idle_interval
+                if background:
+                    delay = max(delay, idle_interval)
+                self._wake.wait(delay)
         threading.Thread(target=loop, daemon=True).start()
         return True
 
@@ -94,6 +117,7 @@ class Launcher:
             stop, self._monitor_stop = self._monitor_stop, None
         if stop:
             stop.set()
+            self._wake.set()
 
     def _is_executable(self, path: str) -> bool:
         return Path(path).suffix.lower() in _EXE_EXTS

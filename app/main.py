@@ -105,6 +105,10 @@ def main(page: ft.Page):
             log.exception("восстановление геометрии окна ошибка")
 
     def set_visible(visible: bool):
+        try:
+            launcher.set_background(not visible)
+        except Exception:
+            log.exception("не удалось переключить режим монитора процессов")
         ui = ui_holder.get("ui")
         if ui is not None:
             try:
