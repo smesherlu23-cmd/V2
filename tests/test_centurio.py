@@ -400,7 +400,7 @@ def test_discovery_sources():
     """Найденное помечается источником и умеет докладывать об ошибках."""
     from app.platform import discovery
 
-    source = _read("app", "platform", "discovery.py")
+    source = "\n".join(text for _label, text in _sources("platform/discovery"))
     ok("'startmenu'" in source, "the Start Menu pass tags what it finds")
     ok("'registry'" in source, "and so do the uninstall and App Paths passes")
 
@@ -802,14 +802,14 @@ def test_cdn_circuit_breaker():
     ok(discovery._cdn_available() is True, "downloads start out enabled")
 
     calls = {"n": 0}
-    original = discovery._http_get
+    original = discovery.steam_art._http_get
 
     def offline(url, timeout=None):
         calls["n"] += 1
         discovery._cdn_record(False)
         return None
 
-    discovery._http_get = offline
+    discovery.steam_art._http_get = offline
     try:
         with tempfile.TemporaryDirectory() as cache:
             ok(discovery._steam_cdn_art("730", cache) is None, "art lookup fails while offline")
@@ -830,13 +830,13 @@ def test_cdn_circuit_breaker():
                 discovery._cdn_record(True)
                 return None
 
-            discovery._http_get = not_found
+            discovery.steam_art._http_get = not_found
             discovery._steam_cdn_art("555", cache)
             after_first = calls["n"]
             discovery._steam_cdn_art("555", cache)
             ok(calls["n"] == after_first, "a known miss is cached for the session")
     finally:
-        discovery._http_get = original
+        discovery.steam_art._http_get = original
         discovery.reset_cdn_state()
 
 
@@ -1248,20 +1248,20 @@ def test_discovery():
     # _steam_roots is module-level state. Every stub below is restored: these
     # tests share one process with everything after them in __main__, and an
     # unrestored patch quietly makes the order of the test list significant.
-    real_steam_roots = discovery._steam_roots
+    real_steam_roots = discovery.steam_paths._steam_roots
     try:
         with tempfile.TemporaryDirectory() as d:
             lib = os.path.join(d, "steamapps")
             os.makedirs(lib)
             with open(os.path.join(lib, "appmanifest_730.acf"), "w") as fh:
                 fh.write('"AppState"{ "appid" "730" "name" "Counter-Strike 2" }')
-            discovery._steam_roots = lambda: [d]
+            discovery.steam_paths._steam_roots = lambda: [d]
             games = discovery._steam_games(None)
             ok(games and games[0]["sub"] == "Steam", "steam games carry sub='Steam'")
             ok(games and "track_exe" in games[0], "steam games carry a track_exe field")
             ok(games and "poster" in games[0], "steam games carry a poster field")
     finally:
-        discovery._steam_roots = real_steam_roots
+        discovery.steam_paths._steam_roots = real_steam_roots
 
 
     with tempfile.TemporaryDirectory() as d:
@@ -1317,13 +1317,13 @@ def test_discovery():
     a = store2.add_app({"name": "CS2", "path": "steam://rungameid/730", "icon": "/fake/cover.jpg"})
     ok(not a.get("sub"), "precondition: no sub yet")
     try:
-        discovery._steam_roots = lambda: []
+        discovery.steam_paths._steam_roots = lambda: []
         changed = discovery.backfill_icons(store2, None)
         ok(changed and store2.get_app(a["id"])["sub"] == "Steam",
            "backfill_icons fixes sub even when icon already present")
     finally:
-        discovery._steam_roots = real_steam_roots
-    ok(discovery._steam_roots is real_steam_roots,
+        discovery.steam_paths._steam_roots = real_steam_roots
+    ok(discovery.steam_paths._steam_roots is real_steam_roots,
        "the module-level Steam-root lookup is left as this test found it")
 
 
