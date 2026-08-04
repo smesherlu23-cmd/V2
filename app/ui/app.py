@@ -215,7 +215,7 @@ class CenturioUI:
         with self._win_lock:
             self._win_at = 0.0
         try:
-            self.refresh()
+            self.refresh(content_only=True)
         except Exception:
             log.exception("сбой при обновлении интерфейса после изменения запущенных приложений")
 

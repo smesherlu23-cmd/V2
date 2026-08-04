@@ -450,7 +450,7 @@ class Store:
                 return None
             app["last_launched"] = int(time.time() * 1000)
             app["launch_count"] = app.get("launch_count", 0) + 1
-            self._persist()
+            self._persist_debounce.schedule()
             return app
 
     def add_category(self, name: str, icon: str | None = None, color: str | None = None) -> dict:

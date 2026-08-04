@@ -4,7 +4,7 @@ import ntpath
 import sys
 import threading
 
-from ..infra import log
+from ..infra import log, procs
 
 _SW_RESTORE = 9
 _SW_MINIMIZE = 6
@@ -31,20 +31,8 @@ def _user32():
 
 
 def _pid_names(pids) -> dict[int, str]:
-    try:
-        import psutil
-    except Exception:
-        return {}
-    out: dict[int, str] = {}
     wanted = set(pids)
-    try:
-        for proc in psutil.process_iter(["pid", "name"]):
-            pid = proc.info.get("pid")
-            if pid in wanted and proc.info.get("name"):
-                out[pid] = proc.info["name"].lower()
-    except Exception:
-        log.exception("не удалось прочитать имена процессов")
-    return out
+    return {pid: name for pid, name in procs.snapshot().items() if pid in wanted}
 
 
 def list_windows() -> list[dict]:
