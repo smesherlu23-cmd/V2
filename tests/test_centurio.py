@@ -2175,7 +2175,7 @@ def test_ui_context_menus():
                for n in ("A", "B", "C")]
         ui, page = _ui_for(store)
 
-        ui._app_menu(store.get_app(ids[0]), _tap())
+        ui.context_menus.app_menu(store.get_app(ids[0]), _tap())
         ok(not ui.menu.open,
            "right-clicking a plain tile no longer opens a popup menu")
         ok(ui.view.inspector == ids[0] and ui.inspector_container.visible,
@@ -2186,7 +2186,7 @@ def test_ui_context_menus():
 
         ui.view.select_one(ids[0])
         ui.view.toggle_selection(ids[1])
-        ui._app_menu(store.get_app(ids[0]), _tap())
+        ui.context_menus.app_menu(store.get_app(ids[0]), _tap())
         labels = _menu_labels(ui)
         ok("В набор…" in labels,
            "right-clicking inside a selection offers the selection's menu")
@@ -2195,14 +2195,14 @@ def test_ui_context_menus():
 
         submenu = [r for r in ui.menu._rows if r["kind"] == "item" and r["submenu"]]
         ok(len(submenu) == 2, "two of its entries open submenus")
-        ui.menu.toggle_submenu("cat", ui._category_submenu(ids[:2]), 250)
+        ui.menu.toggle_submenu("cat", ui.context_menus._category_submenu(ids[:2]), 250)
         ok(ui.menu.sub_card.visible, "and the submenu opens next to the menu")
         ok("Работа" in _texts(ui.menu.sub_card), "listing the categories to move into")
 
         ui.menu.close()
         ok(not ui.menu.open, "clicking away closes it")
 
-        ui._category_menu(store.state()["categories"][0], _tap())
+        ui.context_menus.category_menu(store.state()["categories"][0], _tap())
         labels = _menu_labels(ui)
         for entry in ("Переименовать", "Цвет и иконка", "Удалить категорию"):
             ok(entry in labels, f"the category menu offers «{entry}»")
@@ -2217,7 +2217,7 @@ def test_ui_context_menus():
 
         # Меню не должно вылезать за край окна.
         ui.menu.close()
-        ui._category_menu(store.state()["categories"][0], _tap(1390, 870))
+        ui.context_menus.category_menu(store.state()["categories"][0], _tap(1390, 870))
         ok(ui.menu.card.left < 1390 and ui.menu.card.top < 870,
            "a menu opened near the corner is flipped back inside the window")
 
@@ -2267,12 +2267,12 @@ def test_ui_inspector_replaces_the_modal_form():
         ui._set_admin(app_id, True)
         ok(store.get_app(app_id)["run_as_admin"] is True, "and the admin switch")
 
-        ui._launch_more_menu(store.get_app(app_id), _tap())
+        ui.context_menus.launch_more_menu(store.get_app(app_id), _tap())
         for entry in ("Открыть ещё окно", "От имени администратора"):
             ok(entry in _menu_labels(ui), f"«Ещё способы запуска» offers «{entry}»")
         ui.menu.close()
 
-        ui._add_to_set_menu(store.get_app(app_id), _tap())
+        ui.context_menus.add_to_set_menu(store.get_app(app_id), _tap())
         ok("Новый набор…" in _menu_labels(ui),
            "the «+» chip in «В наборах» opens the same add-to-set menu")
         ui.menu.close()
@@ -2452,7 +2452,7 @@ def test_ui_click_launches_right_click_inspects():
         ok(ui.launcher.launch.called, "a plain click launches the app directly")
         ok(ui.view.inspector is None, "without opening the inspector")
 
-        ui._app_menu(store.get_app(ids[1]), _tap())
+        ui.context_menus.app_menu(store.get_app(ids[1]), _tap())
         ok(ui.launcher.launch.call_count == 1,
            "right-clicking a plain tile does not launch it")
         ok(ui.view.inspector == ids[1] and ui.inspector_container.visible,
@@ -2464,7 +2464,7 @@ def test_ui_click_launches_right_click_inspects():
         ui.launcher.launch.reset_mock()
         ui._tile_tap(ids[0], ids)
         ok(ui.launcher.launch.called, "list rows launch on a plain click too")
-        ui._app_menu(store.get_app(ids[1]), _tap())
+        ui.context_menus.app_menu(store.get_app(ids[1]), _tap())
         ok(ui.view.inspector == ids[1], "and open the inspector on the right click")
 
 
@@ -2549,7 +2549,7 @@ def test_ui_bulk_operations():
 
         # У Flet в событии клика модификаторов нет, поэтому тот же путь есть в
         # меню по правой кнопке — иначе мышью диапазон было бы не взять.
-        ui._app_menu(store.get_app(ids[3]), _tap())
+        ui.context_menus.app_menu(store.get_app(ids[3]), _tap())
         labels = _menu_labels(ui)
         for entry in ("Отметить", "Выбрать до этой", "Выбрать всё", "Выйти из режима"):
             ok(entry in labels, f"the select-mode menu offers «{entry}»")
@@ -2559,7 +2559,7 @@ def test_ui_bulk_operations():
 
         ui.toggle_select_mode()
         ok(not ui.view.select_mode, "leaving select mode")
-        ui._app_menu(store.get_app(ids[0]), _tap())
+        ui.context_menus.app_menu(store.get_app(ids[0]), _tap())
         ok(ui.view.inspector == ids[0] and not ui.menu.open,
            "outside select mode, right-clicking an ordinary tile opens the "
            "inspector instead of a menu — «Выбрать» in the toolbar is how the "

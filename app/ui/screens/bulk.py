@@ -40,8 +40,8 @@ def build_bulk_bar(ui):
         ft.Row([
             T(f"Выбрано {len(ids)}", size=13, weight=ft.FontWeight.W_600, color=C.WHITE),
             divider(),
-            action("Категория", ft.Icons.FOLDER, lambda: ui._bulk_menu("cat"), arrow=True),
-            action("В набор", ft.Icons.LAYERS, lambda: ui._bulk_menu("set"), arrow=True),
+            action("Категория", ft.Icons.FOLDER, lambda: ui.context_menus.bulk_menu("cat"), arrow=True),
+            action("В набор", ft.Icons.LAYERS, lambda: ui.context_menus.bulk_menu("set"), arrow=True),
             action("В избранное", ft.Icons.STAR, lambda: ui._bulk_favorite(ids),
                    icon_color=C.STAR),
             action("Показать" if in_hidden else "Скрыть",

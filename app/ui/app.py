@@ -12,7 +12,6 @@ from .. import __version__
 from ..controllers.scan import ScanController
 from ..controllers.sets import SetsController
 from ..controllers.triage import TriageController
-from ..core import layout as L
 from ..core import queries
 from ..core.hotkeys import free_quick_slot, is_reserved, quick_accels, set_accels
 from ..core.store import Store
@@ -23,6 +22,7 @@ from ..platform import windows as W
 from . import colors as C
 from . import menus, screens
 from . import widgets as Wg
+from .context_menus import ContextMenus
 from .format import T
 from .images import img_b64, is_launcher_art
 from .menus import MenuHost
@@ -61,7 +61,8 @@ class CenturioUI:
 
         self.toast = ToastHost(page)
         self.notify = Notifier(self.toast)
-        self.menu = MenuHost(page, on_dismiss=self._on_menu_dismissed)
+        self.context_menus = ContextMenus(self)
+        self.menu = MenuHost(page, on_dismiss=self.context_menus.on_menu_dismissed)
         self.set_ops = SetsController(self)
         self.scan = ScanController(self)
         self.triage = TriageController(self)
@@ -479,7 +480,7 @@ class CenturioUI:
                 lambda cid=cat["id"]: self._set_filter(f"category:{cid}"), cat["name"],
                 fixed_color=C.category_color(cat),
                 on_drop_app=lambda ids, cid=cat["id"]: self._move_apps_to_category(ids, cid),
-                on_context=lambda e, c=cat: self._category_menu(c, e)))
+                on_context=lambda e, c=cat: self.context_menus.category_menu(c, e)))
         add = ft.Container(ft.Icon(ft.Icons.ADD, size=16, color=C.TEXT_FAINT),
                            width=C.RAIL_BTN, height=C.RAIL_BTN, border_radius=21,
                            alignment=ft.alignment.center,
@@ -613,7 +614,7 @@ class CenturioUI:
         rest = C.CONTROL if active else None
         return ft.DragTarget(
             group="apps", content=ft.GestureDetector(
-                row, on_secondary_tap_down=lambda e, r=rec: self._set_menu(r, e)),
+                row, on_secondary_tap_down=lambda e, r=rec: self.context_menus.set_menu(r, e)),
             on_accept=lambda e, sid=rec["id"]: self._drop_on_set(sid, e, row, rest),
             on_will_accept=lambda e, r=row: self._highlight_drop(r, True, rest),
             on_leave=lambda e, r=row: self._highlight_drop(r, False, rest))
@@ -704,7 +705,7 @@ class CenturioUI:
                    spacing=7),
             height=34, padding=ft.padding.symmetric(0, 12),
             border=ft.border.all(1, C.CONTROL), border_radius=9,
-            on_click=lambda e: self._sort_menu(e), alignment=ft.alignment.center,
+            on_click=lambda e: self.context_menus.sort_menu(e), alignment=ft.alignment.center,
             tooltip="Порядок плиток",
         )
         Wg.hoverable(sort_btn, None, C.SELECTED_BG)
@@ -835,7 +836,7 @@ class CenturioUI:
             on_click=lambda e, i=app["id"]: self._launch(i))
         Wg.hoverable(card, C.PANEL, C.SELECTED_BG)
         return ft.GestureDetector(card,
-                                  on_secondary_tap_down=lambda e, ap=app: self._app_menu(ap, e))
+                                  on_secondary_tap_down=lambda e, ap=app: self.context_menus.app_menu(ap, e))
 
     def _set_card(self, rec):
         accel = self._set_accels.get(rec["id"])
@@ -853,7 +854,7 @@ class CenturioUI:
             on_click=lambda e, sid=rec["id"]: self.set_ops.launch_set(sid))
         Wg.hoverable(card, C.SET_BG, C.PANEL)
         return ft.GestureDetector(card,
-                                  on_secondary_tap_down=lambda e, r=rec: self._set_menu(r, e))
+                                  on_secondary_tap_down=lambda e, r=rec: self.context_menus.set_menu(r, e))
 
     def _quick_empty(self, slot):
         return ft.Container(
@@ -887,7 +888,7 @@ class CenturioUI:
         if not cat:
             return head
         return ft.GestureDetector(head,
-                                  on_secondary_tap_down=lambda e, c=cat: self._category_menu(c, e))
+                                  on_secondary_tap_down=lambda e, c=cat: self.context_menus.category_menu(c, e))
 
     def _use_poster(self, a):
         return bool(self._settings.get("game_posters", True)
@@ -1048,7 +1049,7 @@ class CenturioUI:
         return ft.GestureDetector(
             tile, mouse_cursor=ft.MouseCursor.CLICK,
             on_tap_down=lambda e, i=a["id"]: self._tile_tap(i, ids, e),
-            on_secondary_tap_down=lambda e, ap=a: self._app_menu(ap, e))
+            on_secondary_tap_down=lambda e, ap=a: self.context_menus.app_menu(ap, e))
 
     def _list(self, apps):
         ids = [a["id"] for a in apps]
@@ -1088,7 +1089,7 @@ class CenturioUI:
         controls.append(ft.Container(ft.Icon(ft.Icons.MORE_HORIZ, size=16, color=C.MUTED),
                                      width=30, height=30, border_radius=9,
                                      alignment=ft.alignment.center, tooltip="Меню",
-                                     on_click=lambda e, ap=a: self._app_menu(ap, None)))
+                                     on_click=lambda e, ap=a: self.context_menus.app_menu(ap, None)))
         row = ft.Container(ft.Row(controls, spacing=12,
                                   vertical_alignment=ft.CrossAxisAlignment.CENTER),
                            padding=ft.padding.symmetric(9, 12), border_radius=11,
@@ -1099,7 +1100,7 @@ class CenturioUI:
             Wg.hoverable(row, C.PANEL, C.SELECTED_BG)
         built = ft.GestureDetector(row,
                                    on_tap_down=lambda e, i=a["id"]: self._tile_tap(i, ids, e),
-                                   on_secondary_tap_down=lambda e, ap=a: self._app_menu(ap, e))
+                                   on_secondary_tap_down=lambda e, ap=a: self.context_menus.app_menu(ap, e))
         self._tile_cache[a["id"]] = (sig, built)
         self._tile_cache.move_to_end(a["id"])
         return built
@@ -1160,7 +1161,7 @@ class CenturioUI:
                 square(ft.Icons.FOLDER_OPEN, "Показать в папке",
                        lambda: self._show_in_folder(app["id"])),
                 square(ft.Icons.MORE_HORIZ, "Ещё способы запуска",
-                       lambda: self._launch_more_menu(app, None)),
+                       lambda: self.context_menus.launch_more_menu(app, None)),
             ], spacing=8), padding=ft.padding.only(18, 0, 18, 0))
 
         props = [
@@ -1237,7 +1238,7 @@ class CenturioUI:
                    spacing=6, tight=True),
             height=26, border_radius=13, border=ft.border.all(1, C.DASHED),
             padding=ft.padding.symmetric(0, 9), tooltip="Добавить в набор",
-            on_click=lambda e: self._add_to_set_menu(app, e)))
+            on_click=lambda e: self.context_menus.add_to_set_menu(app, e)))
         return ft.Row(chips, spacing=6, wrap=True, run_spacing=6, tight=True)
 
     def _cat_selector(self, app, cat):
@@ -1253,7 +1254,7 @@ class CenturioUI:
             width=160, height=32, bgcolor=C.PANEL, border=ft.border.all(1, C.CONTROL),
             border_radius=8, padding=ft.padding.symmetric(0, 10),
             tooltip="Выбрать категорию",
-            on_click=lambda e: self._category_picker(app, e))
+            on_click=lambda e: self.context_menus.category_picker(app, e))
 
     def _quick_sub(self, app) -> str:
         accel = self._accels.get(app["id"])
@@ -1403,243 +1404,6 @@ class CenturioUI:
         self.bulk_card.offset = ft.Offset(0, 0)
         self.bulk_layer.visible = True
 
-    def _menu_at(self, e):
-        if e is None:
-            return self._window_width() / 2, 180.0
-        return float(getattr(e, "global_x", 0) or 0), float(getattr(e, "global_y", 0) or 0)
-
-    def _on_menu_dismissed(self):
-        self.safe_refresh()
-
-    def _app_menu(self, app, e):
-        app = self.store.get_app(app["id"]) or app
-        if self.view.select_mode:
-            self._select_mode_menu(app, e)
-            return
-        if app["id"] in self.view.sel and len(self.view.sel) > 1:
-            self._selection_menu(e)
-            return
-        self._select_tile(app["id"])
-
-    def _select_mode_menu(self, app, e):
-        x, y = self._menu_at(e)
-        ids = list(self.view.sel)
-        picked = app["id"] in ids
-        anchor = self.view.selection_anchor
-        rows = [
-            menus.item(ft.Icons.CHECK_BOX if picked else ft.Icons.CHECK_BOX_OUTLINE_BLANK,
-                       "Снять отметку" if picked else "Отметить",
-                       lambda: self._toggle_pick(app["id"])),
-            menus.item(ft.Icons.SELECT_ALL, "Выбрать до этой",
-                       lambda: self._range_to(app["id"]),
-                       disabled=not anchor or anchor == app["id"]),
-            menus.item(ft.Icons.DONE_ALL, "Выбрать всё", self._select_all_visible,
-                       hint="" if self.calm() else "Ctrl+A"),
-        ]
-        if ids:
-            rows += [
-                menus.separator(),
-                menus.item(ft.Icons.FOLDER, "Переложить в…",
-                           lambda: self.menu.toggle_submenu(
-                               "cat", self._category_submenu(ids), y), submenu=True),
-                menus.item(ft.Icons.LAYERS, "В набор…",
-                           lambda: self.menu.toggle_submenu(
-                               "set", self._set_submenu(ids), y), submenu=True),
-                menus.item(ft.Icons.STAR_BORDER, "В избранное",
-                           lambda: self._bulk_favorite(ids)),
-                menus.item(ft.Icons.VISIBILITY if self.view.filter == "hidden"
-                           else ft.Icons.VISIBILITY_OFF,
-                           "Показать" if self.view.filter == "hidden" else "Скрыть из сетки",
-                           lambda: self._hide_apps(ids, self.view.filter != "hidden")),
-                menus.item(ft.Icons.DELETE_OUTLINE, f"Убрать · {len(ids)}",
-                           lambda: self._remove_apps(ids), danger=True),
-            ]
-        rows += [menus.separator(),
-                 menus.item(ft.Icons.CLOSE, "Выйти из режима", self.toggle_select_mode,
-                            hint="" if self.calm() else "Esc")]
-        header = (menus.text_header(f"Выбрано {len(ids)}") if ids
-                  else menus.app_header(self, app, app["id"] in self.running))
-        self.menu.show(x, y, rows, header=header)
-
-    def _selection_menu(self, e):
-        x, y = self._menu_at(e)
-        ids = list(self.view.sel)
-        count = len(ids)
-        rows = [
-            menus.item(ft.Icons.FOLDER, "Переложить в…",
-                       lambda: self.menu.toggle_submenu("cat", self._category_submenu(ids), y),
-                       submenu=True),
-            menus.item(ft.Icons.LAYERS, "В набор…",
-                       lambda: self.menu.toggle_submenu("set", self._set_submenu(ids), y),
-                       submenu=True),
-            menus.item(ft.Icons.STAR_BORDER, "В избранное", lambda: self._bulk_favorite(ids)),
-            menus.item(ft.Icons.VISIBILITY if self.view.filter == "hidden"
-                       else ft.Icons.VISIBILITY_OFF,
-                       "Показать" if self.view.filter == "hidden" else "Скрыть из сетки",
-                       lambda: self._hide_apps(ids, self.view.filter != "hidden")),
-            menus.separator(),
-            menus.item(ft.Icons.DELETE_OUTLINE, f"Убрать · {count}",
-                       lambda: self._remove_apps(ids), danger=True),
-        ]
-        self.menu.show(x, y, rows, header=menus.text_header(f"Выбрано {count}"))
-
-    def _category_menu(self, cat, e):
-        x, y = self._menu_at(e)
-        cats = self.categories()
-        index = [c["id"] for c in cats].index(cat["id"]) if cat["id"] in [c["id"] for c in cats] else 0
-        count = sum(1 for a in self.apps() if a.get("category_id") == cat["id"])
-        rows = [
-            menus.item(ft.Icons.EDIT, "Переименовать", lambda: self._open_popover(cat["id"])),
-            menus.item(ft.Icons.PALETTE, "Цвет и иконка", lambda: self._open_popover(cat["id"])),
-            menus.item(ft.Icons.ARROW_UPWARD, "Переместить выше",
-                       lambda: self._move_category(cat["id"], -1), disabled=index == 0),
-            menus.item(ft.Icons.ARROW_DOWNWARD, "Переместить ниже",
-                       lambda: self._move_category(cat["id"], 1),
-                       disabled=index >= len(cats) - 1),
-            menus.separator(),
-            menus.item(ft.Icons.DELETE_OUTLINE, "Удалить категорию",
-                       lambda: self._remove_category(cat["id"]), danger=True),
-        ]
-        self.menu.show(x, y, rows, header=menus.category_header(self, cat, count))
-
-    def _set_menu(self, rec, e):
-        x, y = self._menu_at(e)
-        accel = self._set_accels.get(rec["id"])
-        rows = [
-            menus.item(ft.Icons.PLAY_ARROW, "Запустить набор",
-                       lambda: self.set_ops.launch_set(rec["id"]),
-                       hint="" if self.calm() else (accel or "")),
-        ]
-        if rec.get("close_together"):
-            rows.append(menus.item(ft.Icons.CLOSE, "Закрыть набор",
-                                   lambda: self.set_ops.close_set_windows(rec["id"])))
-        rows += [
-            menus.item(ft.Icons.CROP_FREE, "Расставить окна",
-                       lambda: self.set_ops.arrange_set(rec["id"]),
-                       disabled=not queries.has_layout(rec)),
-            menus.item(ft.Icons.TUNE, "Раскладка и порядок",
-                       lambda: self._open_set(rec["id"])),
-            menus.item(ft.Icons.BOLT,
-                       "Убрать из быстрого запуска" if rec.get("quick") else "В быстрый запуск",
-                       lambda: self._toggle_set_quick(rec["id"], not rec.get("quick"))),
-            menus.separator(),
-            menus.item(ft.Icons.DELETE_OUTLINE, "Удалить набор",
-                       lambda: self.set_ops.remove_set(rec["id"]), danger=True),
-        ]
-        self.menu.show(x, y, rows, header=menus.text_header(rec["name"]))
-
-    def _set_item_menu(self, rec, entry, e):
-        x, y = self._menu_at(e)
-        app = next((a for a in self.apps() if a["id"] == entry["app_id"]), None)
-        preset = rec["layout"]["preset"]
-        places = [menus.item(ft.Icons.CHECK if entry.get("slot") == i else None,
-                             L.slot_label(preset, i, rec["layout"]["split"]).capitalize(),
-                             lambda idx=i: self.set_ops.set_item_slot(rec["id"], entry["app_id"], idx))
-                  for i in range(L.slot_count(preset))]
-        places.append(menus.item(ft.Icons.CHECK if entry.get("slot") is None
-                                 and not entry.get("minimized") else None,
-                                 "Без места", lambda: self.set_ops.set_item_slot(
-                                     rec["id"], entry["app_id"], None)))
-        rows = [
-            menus.item(ft.Icons.ARROW_UPWARD, "Запускать раньше",
-                       lambda: self.set_ops.move_set_item(rec["id"], entry["app_id"], -1)),
-            menus.item(ft.Icons.ARROW_DOWNWARD, "Запускать позже",
-                       lambda: self.set_ops.move_set_item(rec["id"], entry["app_id"], 1)),
-            menus.separator(),
-            menus.item(ft.Icons.CROP_FREE, "Место в раскладке",
-                       lambda: self.menu.toggle_submenu("slot", places, y), submenu=True),
-            menus.item(ft.Icons.LAYERS_CLEAR if entry.get("minimized")
-                       else ft.Icons.MINIMIZE,
-                       "Открывать обычно" if entry.get("minimized") else "Запускать свёрнутым",
-                       lambda: self.set_ops.set_item_minimized(rec["id"], entry["app_id"],
-                                                        not entry.get("minimized"))),
-            menus.separator(),
-            menus.item(ft.Icons.DELETE_OUTLINE, "Убрать из набора",
-                       lambda: self.set_ops.remove_from_set(rec["id"], entry["app_id"]),
-                       danger=True),
-        ]
-        self.menu.show(x, y, rows,
-                       header=menus.text_header(app["name"] if app else "Программа"))
-
-    def _category_submenu(self, app_ids):
-        rows = []
-        for cat in self.categories():
-            rows.append(menus.item(cat.get("icon") or "folder", cat["name"],
-                                   lambda cid=cat["id"]: self._move_apps_to_category(app_ids, cid)))
-        return rows or [menus.item(None, "Категорий нет", None, disabled=True)]
-
-    def _set_submenu(self, app_ids):
-        rows = [menus.item(ft.Icons.ADD, "Новый набор…", lambda: self.set_ops.make_set(app_ids))]
-        records = self.sets()
-        if records:
-            rows.append(menus.separator())
-        for rec in records:
-            rows.append(menus.item(ft.Icons.LAYERS, rec["name"],
-                                   lambda sid=rec["id"]: self.set_ops.add_to_set(sid, app_ids)))
-        return rows
-
-    def _sort_submenu(self):
-        return [menus.item(ft.Icons.CHECK if self.view.sort == key else None,
-                           queries.SORT_LABELS[key], lambda k=key: self._set_sort(k))
-                for key in queries.SORT_KEYS]
-
-    def _sort_menu(self, e):
-        x, y = self._menu_at(e)
-        self.menu.show(x, y, self._sort_submenu(), header=None)
-
-    def _category_picker(self, app, e):
-        x, y = self._menu_at(e)
-        self.menu.show(x, y, self._category_submenu([app["id"]]),
-                       header=menus.text_header("Переложить в…"))
-
-    def _add_to_set_menu(self, app, e):
-        x, y = self._menu_at(e)
-        self.menu.show(x, y, self._set_submenu([app["id"]]),
-                       header=menus.text_header("Добавить в набор"))
-
-    def _launch_more_menu(self, app, e):
-        x, y = self._menu_at(e)
-        rows = [
-            menus.item(ft.Icons.ADD, "Открыть ещё окно",
-                       lambda: self._launch(app["id"], again=True)),
-            menus.item(ft.Icons.SHIELD, "От имени администратора",
-                       lambda: self._launch(app["id"], as_admin=True)),
-        ]
-        self.menu.show(x, y, rows, header=None)
-
-    def _bulk_menu(self, kind: str):
-        ids = list(self.view.sel)
-        if not ids:
-            return
-        rows = (self._category_submenu(ids) if kind == "cat" else self._set_submenu(ids))
-        title = "Переложить в…" if kind == "cat" else "Добавить в набор…"
-        self.menu.show(self._window_width() / 2 - 120, self._window_height() - 96,
-                       rows, header=menus.text_header(title))
-
-    def _preset_menu(self, rec, e):
-        x, y = self._menu_at(e)
-        rows = [menus.item(ft.Icons.CHECK if rec["layout"]["preset"] == key else None,
-                           L.PRESET_LABELS[key],
-                           lambda k=key: self.set_ops.set_layout_preset(rec["id"], k))
-                for key in L.PRESETS]
-        self.menu.show(x, y, rows, header=menus.text_header("Раскладка"))
-
-    def _monitor_menu(self, rec, e):
-        x, y = self._menu_at(e)
-        count = max(1, len(W.monitors()))
-        rows = [menus.item(ft.Icons.CHECK if rec["monitor"] == i else None,
-                           f"Монитор {i + 1}",
-                           lambda idx=i: self.set_ops.set_set_monitor(rec["id"], idx))
-                for i in range(count)]
-        self.menu.show(x, y, rows, header=menus.text_header("Куда расставлять"))
-
-    def _delay_menu(self, rec, e):
-        x, y = self._menu_at(e)
-        rows = [menus.item(ft.Icons.CHECK if abs(rec["delay_seconds"] - value) < 0.01 else None,
-                           "без паузы" if not value else f"{value:g} с",
-                           lambda v=value: self.set_ops.set_set_delay(rec["id"], v))
-                for value in (0, 1, 2, 4, 8)]
-        self.menu.show(x, y, rows, header=menus.text_header("Пауза между запусками"))
 
     def handle_key(self, e: ft.KeyboardEvent) -> None:
         key = e.key or ""
@@ -1992,7 +1756,7 @@ class CenturioUI:
             self.view.close_palette()
             self.search_field.value = ""
             self.refresh()
-            self.menu.show(self._window_width() / 2, 200.0, self._set_submenu([app["id"]]),
+            self.menu.show(self._window_width() / 2, 200.0, self.context_menus.set_submenu([app["id"]]),
                            header=menus.text_header("Добавить в набор…"))
 
     def palette_click(self, row):
@@ -2141,20 +1905,6 @@ class CenturioUI:
         self.store.update_apps(ids, {"favorite": False})
         self.refresh()
 
-    def add_to_set_picker(self, set_id, e=None):
-        rec = self.store.get_set(set_id)
-        if not rec:
-            return
-        inside = set(rec["apps"])
-        rows = [menus.item(None, a["name"], lambda aid=a["id"]: self.set_ops.add_to_set(set_id, [aid]))
-                for a in sorted(queries.visible(self.apps()), key=lambda a: a["name"].lower())
-                if a["id"] not in inside]
-        if not rows:
-            self.toast.show("В наборе уже всё, что есть в библиотеке",
-                            icon=ft.Icons.LAYERS, icon_color=C.MUTED)
-            return
-        x, y = self._menu_at(e)
-        self.menu.show(x, y, rows[:14], header=menus.text_header("Добавить в набор"))
 
     def _remove_apps(self, app_ids):
         if not app_ids:

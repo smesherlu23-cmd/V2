@@ -38,7 +38,7 @@ def _set_header(ui, rec):
     meta += [_meta_divider(),
              ft.Container(T(f"Монитор {rec['monitor'] + 1}", size=12, color=C.MUTED_2),
                           tooltip="Куда расставлять окна",
-                          on_click=lambda e: ui._monitor_menu(rec, e))]
+                          on_click=lambda e: ui.context_menus.monitor_menu(rec, e))]
     right = [Wg.outline_btn("Снять с текущих окон",
                             lambda: ui.set_ops.capture_set_layout(rec["id"]), ft.Icons.SAVE,
                             height=38),
@@ -200,7 +200,7 @@ def _order_column(ui, rec):
                spacing=7, tight=True, alignment=ft.MainAxisAlignment.CENTER),
         height=44, border_radius=11, border=ft.border.all(1, C.LINE_4),
         alignment=ft.alignment.center,
-        on_click=lambda e: ui.add_to_set_picker(rec["id"], e)))
+        on_click=lambda e: ui.context_menus.add_to_set_picker(rec["id"], e)))
 
     settings = [
         ft.Container(height=1, bgcolor=C.LINE_2, margin=ft.margin.only(top=4)),
@@ -212,7 +212,7 @@ def _order_column(ui, rec):
                                  bgcolor=C.PANEL, border=ft.border.all(1, C.CONTROL),
                                  border_radius=8, alignment=ft.alignment.center,
                                  tooltip="Другая пауза",
-                                 on_click=lambda e: ui._delay_menu(rec, e))),
+                                 on_click=lambda e: ui.context_menus.delay_menu(rec, e))),
         _set_option(ui, "Закрывать набор целиком",
                     "в меню набора появится «Закрыть набор»",
                     Wg.toggle(rec["close_together"],
@@ -257,14 +257,14 @@ def _order_row(ui, rec, entry):
             ft.Container(ft.Icon(ft.Icons.MORE_HORIZ, size=16, color=C.TEXT_FAINT),
                          width=24, height=24, alignment=ft.alignment.center,
                          tooltip="Меню",
-                         on_click=lambda e, en=entry: ui._set_item_menu(rec, en, e)),
+                         on_click=lambda e, en=entry: ui.context_menus.set_item_menu(rec, en, e)),
         ], spacing=11, vertical_alignment=ft.CrossAxisAlignment.CENTER),
         height=52, padding=ft.padding.symmetric(0, 12), border_radius=11,
         bgcolor=C.SET_BG if muted else C.PANEL,
         border=ft.border.all(1, C.DASHED if muted else C.LINE))
     Wg.hoverable(row, C.SET_BG if muted else C.PANEL, C.SELECTED_BG)
     tapper = ft.GestureDetector(
-        row, on_secondary_tap_down=lambda e, en=entry: ui._set_item_menu(rec, en, e))
+        row, on_secondary_tap_down=lambda e, en=entry: ui.context_menus.set_item_menu(rec, en, e))
     group = f"setitem:{rec['id']}"
     rest = C.DASHED if muted else C.LINE
     return ft.DragTarget(
