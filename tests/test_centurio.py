@@ -2523,7 +2523,7 @@ def test_ui_sets():
         # Ручка drag_indicator на строке — настоящая: строку тащат на другую.
         dragged = types_ns(data=ids[0])
         page.get_control = lambda _id, ctl=dragged: ctl
-        ui.drop_set_item(rec["id"], ids[1], types_ns(src_id=1), ft.Container())
+        ui.chrome.drop_set_item(rec["id"], ids[1], types_ns(src_id=1), ft.Container())
         ok(store.get_set(rec["id"])["apps"] == [ids[0], ids[1]],
            "dropping one row on another moves it in front of it")
         page.get_control = lambda _id: None
@@ -3431,7 +3431,7 @@ def test_ui_refresh_thread_safety():
         ui, _ = _ui_for(store)
 
         seen_elsewhere = []
-        real_build = ui._build_content
+        real_build = ui.grid.build_content
 
         def probing_build():
             box = []
@@ -3441,18 +3441,18 @@ def test_ui_refresh_thread_safety():
             seen_elsewhere.append(box[0])
             return real_build()
 
-        ui._build_content = probing_build
+        ui.grid.build_content = probing_build
         try:
             ui.refresh()
         finally:
-            ui._build_content = real_build
+            ui.grid.build_content = real_build
         ok(seen_elsewhere == [None],
            "a refresh's snapshot is invisible to every other thread")
         ok(ui._snapshot is None, "the snapshot is dropped when the pass ends")
 
         overlaps = []
         depth = {"n": 0}
-        real_build2 = ui._build_content
+        real_build2 = ui.grid.build_content
 
         def counting_build():
             depth["n"] += 1
@@ -3463,7 +3463,7 @@ def test_ui_refresh_thread_safety():
             finally:
                 depth["n"] -= 1
 
-        ui._build_content = counting_build
+        ui.grid.build_content = counting_build
         errors = []
 
         def hammer():
@@ -3481,7 +3481,7 @@ def test_ui_refresh_thread_safety():
             for t in threads:
                 t.join()
         finally:
-            ui._build_content = real_build2
+            ui.grid.build_content = real_build2
         ok(not errors, f"concurrent refreshes raise nothing ({errors[:1]})")
         ok(not overlaps, "two refresh passes never build the control tree at once")
         ok(ui._snapshot is None, "no snapshot is left behind after the storm")
