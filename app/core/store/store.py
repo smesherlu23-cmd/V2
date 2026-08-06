@@ -243,19 +243,42 @@ class Store:
     def remove_app(self, app_id: str) -> bool:
         return bool(self.remove_apps([app_id]))
 
+    def _remove_apps_locked(self, wanted: set) -> dict:
+        gone = [a for a in self.data["apps"] if a["id"] in wanted]
+        if not gone:
+            return {"apps": [], "sets": []}
+        self.data["apps"] = [a for a in self.data["apps"] if a["id"] not in wanted]
+        affected_sets = []
+        kept_sets = []
+        for rec in self.data["sets"]:
+            if not any(i["app_id"] in wanted for i in rec["items"]):
+                kept_sets.append(rec)
+                continue
+            affected_sets.append(copy.deepcopy(rec))
+            rec["items"] = [i for i in rec["items"] if i["app_id"] not in wanted]
+            sanitize.mirror_items(rec)
+            if rec["items"]:
+                kept_sets.append(rec)
+        self.data["sets"] = kept_sets
+        self._persist()
+        return {"apps": copy.deepcopy(gone), "sets": affected_sets}
+
     def remove_apps(self, app_ids) -> list[dict]:
-        wanted = set(app_ids)
         with self._lock:
-            gone = [a for a in self.data["apps"] if a["id"] in wanted]
-            if not gone:
-                return []
-            self.data["apps"] = [a for a in self.data["apps"] if a["id"] not in wanted]
-            for rec in self.data["sets"]:
-                rec["items"] = [i for i in rec["items"] if i["app_id"] not in wanted]
-                sanitize.mirror_items(rec)
-            self.data["sets"] = [s for s in self.data["sets"] if s["items"]]
-            self._persist()
-            return copy.deepcopy(gone)
+            return self._remove_apps_locked(set(app_ids))["apps"]
+
+    def remove_apps_with_sets(self, app_ids) -> dict:
+        """Like remove_apps, but also hands back the sets it touched.
+
+        A removed app is dropped from every set that held it, and a set left
+        with no members is deleted outright. remove_apps alone throws that
+        membership away, so a caller that undoes the removal (restore_apps)
+        gets the app back but not its place in any set. Callers that need
+        the undo to be complete should use this together with
+        restore_apps_and_sets.
+        """
+        with self._lock:
+            return self._remove_apps_locked(set(app_ids))
 
     def restore_apps(self, records) -> int:
         with self._lock:
@@ -267,6 +290,48 @@ class Store:
             self.data["apps"] += fresh
             self._persist()
             return len(fresh)
+
+    def restore_sets_snapshot(self, snapshot) -> int:
+        if not snapshot:
+            return 0
+        with self._lock:
+            known = {a["id"] for a in self.data["apps"]}
+            by_id = {s["id"]: s for s in self.data["sets"]}
+            restored = 0
+            for raw in snapshot:
+                if not isinstance(raw, dict) or not raw.get("id"):
+                    continue
+                snap = copy.deepcopy(raw)
+                snap["items"] = [i for i in snap.get("items", []) if i.get("app_id") in known]
+                if not snap["items"]:
+                    continue
+                existing = by_id.get(snap["id"])
+                if existing is not None:
+                    existing["items"] = snap["items"]
+                    sanitize.mirror_items(existing)
+                    restored += 1
+                    continue
+                rec = sanitize.clean_set(snap, len(self.data["sets"]))
+                if rec is None:
+                    continue
+                rec["items"] = [i for i in rec["items"] if i["app_id"] in known]
+                if not rec["items"]:
+                    continue
+                self.data["sets"].append(sanitize.mirror_items(rec))
+                by_id[rec["id"]] = rec
+                restored += 1
+            if restored:
+                self.data["sets"].sort(key=lambda s: s.get("order", 0))
+                self._persist()
+            return restored
+
+    def restore_apps_and_sets(self, bundle) -> int:
+        if not isinstance(bundle, dict):
+            return 0
+        with self._lock:
+            restored = self.restore_apps(bundle.get("apps") or [])
+            self.restore_sets_snapshot(bundle.get("sets") or [])
+            return restored
 
     def mark_launched(self, app_id: str) -> dict | None:
         with self._lock:
@@ -616,6 +681,31 @@ class Store:
                 self.data["apps"] += [a for a in clean["apps"] if a.get("id") not in have]
                 hc = {c["id"] for c in self.data["categories"] if c.get("id")}
                 self.data["categories"] += [c for c in clean["categories"] if c.get("id") not in hc]
+
+                known = {a["id"] for a in self.data["apps"]}
+                hs = {s["id"] for s in self.data["sets"] if s.get("id")}
+                for rec in clean["sets"]:
+                    if rec["id"] in hs:
+                        continue
+                    rec = copy.deepcopy(rec)
+                    rec["items"] = [i for i in rec["items"] if i["app_id"] in known]
+                    if not rec["items"]:
+                        continue
+                    rec["order"] = len(self.data["sets"])
+                    sanitize.fit_slots(sanitize.mirror_items(rec))
+                    self.data["sets"].append(rec)
+                    hs.add(rec["id"])
+
+                seen_paths = {(a.get("path") or "").lower() for a in self.data["apps"]}
+                seen_paths |= {i["path"].lower() for i in self.data["inbox"]}
+                for item in clean["inbox"]:
+                    path = item["path"].lower()
+                    if path in seen_paths:
+                        continue
+                    item = copy.deepcopy(item)
+                    item["order"] = len(self.data["inbox"])
+                    self.data["inbox"].append(item)
+                    seen_paths.add(path)
             else:
                 self.data = clean
             self._persist()

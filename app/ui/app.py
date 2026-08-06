@@ -57,6 +57,7 @@ class CenturioUI:
         self._cat_index: dict[str, dict] = {}
         self._visible = True
         self._dirty = False
+        self._capture_active = False
 
         self.toast = ToastHost(page)
         self.notify = Notifier(self.toast)
@@ -240,6 +241,7 @@ class CenturioUI:
         if not self._visible:
             self._dirty = True
             self._settings = self.store.settings()
+            self._sync_capture()
             return
         with self._refresh_lock:
             self._snapshot = self.store.state()
@@ -276,6 +278,7 @@ class CenturioUI:
             finally:
                 self._snapshot = None
             self.page.update()
+        self._sync_capture()
 
     def _trim_tile_cache(self):
         cap = max(TILE_CACHE_MAX, len(self._tiles_used))
@@ -333,6 +336,7 @@ class CenturioUI:
             finally:
                 self._snapshot = None
             self.page.update()
+        self._sync_capture()
 
     def cat_of(self, app) -> dict | None:
         cid = app.get("category_id")
@@ -565,17 +569,29 @@ class CenturioUI:
     def _start_capture(self, target: str):
         self.view.capture = True
         self.view.capture_target = target
+        self._capture_active = True
         cb = self.controllers.get("suspend_hotkeys")
         if cb:
             cb()
 
     def _stop_capture(self):
-        if not self.view.capture:
-            return
         self.view.capture = False
-        cb = self.controllers.get("resume_hotkeys")
-        if cb:
-            cb()
+
+    def _sync_capture(self):
+        """Resume the global hotkey listener once capture mode ends.
+
+        ViewState clears `capture` from several places (closing the
+        inspector, switching filters, entering select mode, revalidating
+        stale ids) without going through `_stop_capture`. Routing the resume
+        through here — called at the end of every refresh — means the
+        listener never stays suspended just because capture ended some way
+        other than pressing Escape in the capture field.
+        """
+        if self._capture_active and not self.view.capture:
+            self._capture_active = False
+            cb = self.controllers.get("resume_hotkeys")
+            if cb:
+                cb()
 
     def _toast_hint_quick(self):
         self.toast.show("Закрепить можно правой кнопкой по плитке — «В быстрый запуск»",
@@ -796,18 +812,19 @@ class CenturioUI:
     def _remove_apps(self, app_ids):
         if not app_ids:
             return
-        gone = self.store.remove_apps(app_ids)
+        bundle = self.store.remove_apps_with_sets(app_ids)
+        gone = bundle["apps"]
         if not gone:
             return
         self.view.close_inspector()
         text = (f"{gone[0]['name']} убран из библиотеки" if len(gone) == 1
                 else f"Убрано {len(gone)} {plu_apps(len(gone))}")
         self.toast.show(text, icon=ft.Icons.DELETE_OUTLINE, icon_color=C.MUTED,
-                        action=lambda: self._restore_apps(gone), action_label="Вернуть")
+                        action=lambda: self._restore_apps(bundle), action_label="Вернуть")
         self.on_library_changed()
 
-    def _restore_apps(self, records):
-        self.store.restore_apps(records)
+    def _restore_apps(self, bundle):
+        self.store.restore_apps_and_sets(bundle)
         self.on_library_changed()
 
     def _add_category(self):
