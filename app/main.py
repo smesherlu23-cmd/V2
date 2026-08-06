@@ -20,12 +20,13 @@ from app.core.hotkeys import (
 from app.core.store import DEFAULT_LAUNCH_HOTKEY, Store
 from app.infra import log
 from app.infra.debounce import Debounce
-from app.platform import autostart
+from app.platform import autostart, single_instance
+from app.platform import windows as W
 from app.platform.launcher import Launcher
 from app.platform.tray import TrayController
 from app.ui import colors as C
 from app.ui.app import CenturioUI
-from app.ui.iconify import ensure_icons
+from app.ui.iconify import ensure_icons, tray_icon_path
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 GEOMETRY_FLUSH_DELAY = 0.5
@@ -41,7 +42,8 @@ def shutdown(store=None, tray=None, launcher=None, hotkeys=None, geometry_flush=
                         ("stopping the hotkey listener", getattr(hotkeys, "stop", None)),
                         ("stopping the process monitor",
                          getattr(launcher, "stop_monitor", None)),
-                        ("stopping the tray icon", getattr(tray, "stop", None))):
+                        ("stopping the tray icon", getattr(tray, "stop", None)),
+                        ("releasing the single-instance lock", single_instance.release)):
         if step is None:
             continue
         try:
@@ -56,7 +58,7 @@ def main(page: ft.Page):
               debug=log.is_debug() or bool(store.state()["settings"].get("debug_log")))
     log.debug("Centurio starting (argv=%s)", sys.argv)
 
-    icon_path = ensure_icons(ASSETS_DIR)
+    ensure_icons(ASSETS_DIR)
     is_web = page.web or os.environ.get("CENTURIO_WEB") == "1"
     start_hidden = "--hidden" in sys.argv
 
@@ -98,11 +100,17 @@ def main(page: ft.Page):
             page.window.resizable = True
             page.window.min_width = C.LIBRARY_MIN_W
             page.window.min_height = C.LIBRARY_MIN_H
-            page.window.width = s.get("win_w") or C.LIBRARY_W
-            page.window.height = s.get("win_h") or C.LIBRARY_H
-            if s.get("win_x") is not None and s.get("win_y") is not None:
-                page.window.left = s["win_x"]
-                page.window.top = s["win_y"]
+            width = s.get("win_w") or C.LIBRARY_W
+            height = s.get("win_h") or C.LIBRARY_H
+            page.window.width = width
+            page.window.height = height
+            x, y = s.get("win_x"), s.get("win_y")
+            have_pos = x is not None and y is not None
+            areas = W.monitors()
+            fits = have_pos and (not areas or W.visible_on_monitors((x, y, width, height), areas))
+            if fits:
+                page.window.left = x
+                page.window.top = y
             else:
                 page.window.center()
             if s.get("win_max"):
@@ -201,8 +209,10 @@ def main(page: ft.Page):
             ui._launch(target)
 
     hotkeys = HotkeyManager(on_trigger=on_hotkey)
+    last_rejected = set()
 
     def refresh_runtime():
+        nonlocal last_rejected
         state = store.state()
         launcher.set_apps(state["apps"])
         tray.refresh()
@@ -212,6 +222,12 @@ def main(page: ft.Page):
             bindings += quick_bindings(state["apps"])
             bindings += set_bindings(_ordered_sets(state))
             hotkeys.register(bindings)
+            rejected = set(hotkeys.rejected)
+            if rejected and rejected != last_rejected:
+                ui = ui_holder.get("ui")
+                if ui is not None:
+                    ui.notify_hotkey_rejects(sorted(rejected))
+            last_rejected = rejected
 
     controllers = {
         "minimize": minimize, "toggle_maximize": toggle_maximize, "close": close,
@@ -226,7 +242,7 @@ def main(page: ft.Page):
                  for item in screens.tray_items(store)]
         return items, screens.library_summary(store)
 
-    tray = TrayController(icon_path, on_show=open_search, on_quit=quit_app,
+    tray = TrayController(tray_icon_path(ASSETS_DIR), on_show=open_search, on_quit=quit_app,
                           on_open_library=open_library, menu_provider=tray_menu)
 
     ui = CenturioUI(page, store, launcher, controllers)

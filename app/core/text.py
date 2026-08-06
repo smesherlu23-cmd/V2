@@ -1,3 +1,7 @@
+"""Small Russian-aware text helpers — pluralization, initials,
+relative-time formatting — shared by every screen that needs to
+show a count or a timestamp."""
+
 from __future__ import annotations
 
 import time

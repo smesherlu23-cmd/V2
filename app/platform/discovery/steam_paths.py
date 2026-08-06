@@ -1,3 +1,8 @@
+"""Finds Steam's install roots and libraries, parses appmanifest
+.acf files for installed games, and locates each game's main
+executable (cached per app, since a fresh search walks the whole
+install directory)."""
+
 from __future__ import annotations
 
 import glob

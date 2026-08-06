@@ -1,3 +1,8 @@
+"""Turns whatever a JSON data file actually contains into records the
+rest of the app can trust the shape of — dropping malformed
+entries, coercing types, filling in defaults — rather than letting
+a corrupt or hand-edited file propagate garbage."""
+
 from __future__ import annotations
 
 import hashlib
@@ -215,10 +220,48 @@ def clean_records(raw, clean) -> list[dict]:
     return out
 
 
+_BOOL_SETTINGS = {
+    "autostart", "minimize_to_tray", "close_to_tray", "show_quick_row",
+    "game_posters", "auto_rescan", "win_max", "hide_after", "triage",
+    "calm", "hints", "debug_log", "onboarded",
+}
+
+_STR_SETTINGS = {"accent", "tile_size", "view_filter", "view_sort", "view_mode",
+                 "launch_hotkey"}
+
+_INT_OR_NONE_SETTINGS = {"win_w", "win_h", "win_x", "win_y"}
+
+
+def _clean_setting_value(key: str, value, default):
+    """Type-check one setting against the shape DEFAULT_SETTINGS implies.
+
+    A malformed data file used to pass any JSON value straight through —
+    `accent: null` silently broke every `.get("accent", C.ACCENT)` default
+    (the key is present, just holding None), and a non-string
+    `launch_hotkey` made it as far as pynput's parser before failing. This
+    only checks *type*, not the value range (a bad "view_filter" still gets
+    corrected by ViewState/queries downstream) — the two checks aren't
+    redundant, each catches what the other can't.
+    """
+    if key in _BOOL_SETTINGS:
+        return value if isinstance(value, bool) else default
+    if key in _STR_SETTINGS:
+        return value if isinstance(value, str) and value.strip() else default
+    if key in _INT_OR_NONE_SETTINGS:
+        if value is None:
+            return None
+        return value if isinstance(value, int) and not isinstance(value, bool) else default
+    if key == "icon_schema":
+        return value if isinstance(value, int) and not isinstance(value, bool) else default
+    if key == "collapsed":
+        return [c for c in value if isinstance(c, str)] if isinstance(value, list) else default
+    return value
+
+
 def clean_settings(raw) -> dict:
     settings = dict(DEFAULT_SETTINGS)
     if isinstance(raw, dict):
-        for key in DEFAULT_SETTINGS:
+        for key, default in DEFAULT_SETTINGS.items():
             if key in raw:
-                settings[key] = raw[key]
+                settings[key] = _clean_setting_value(key, raw[key], default)
     return settings

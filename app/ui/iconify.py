@@ -99,11 +99,24 @@ def generate_icon(path: Path | str, size: int = 256) -> Path:
 
 
 def ensure_icons(assets_dir: Path | str) -> Path:
+    """Make sure icon.png exists and return its path.
+
+    Also makes sure tray.png — the dedicated 32px system-tray variant — is
+    generated alongside it, so tray_icon_path() below always has something
+    to hand pystray instead of the 256px icon scaled down at tray size.
+    """
     assets = Path(assets_dir)
     icon = assets / "icon.png"
     if not icon.exists():
         generate_icon(icon, 256)
+    tray = assets / "tray.png"
+    if not tray.exists():
+        generate_icon(tray, 32)
     return icon
+
+
+def tray_icon_path(assets_dir: Path | str) -> Path:
+    return Path(assets_dir) / "tray.png"
 
 
 if __name__ == "__main__":

@@ -706,24 +706,38 @@ class CenturioUI:
                         action_label="Отменить")
         self.on_library_changed()
 
+    def _hotkey_clash(self, accel, skip_app_id=None, check_launch=True):
+        """Who already holds `accel`, phrased for the "уже занята — …" toast, or None if free.
+
+        Checks the launch hotkey, every app's custom hotkey and every set's
+        slot (explicit or auto-assigned Ctrl+Alt+N) — the three places a
+        combo can be taken. Set slots are recomputed fresh from self.sets()
+        rather than the last refresh()'s cached self._set_accels, so a
+        clash check made mid-capture still sees current data.
+        """
+        if check_launch and accel.lower() == (self.setting("launch_hotkey") or "").lower():
+            return "вызовом Centurio"
+        clash = next((a for a in self.apps()
+                      if a["id"] != skip_app_id
+                      and (a.get("hotkey") or "").lower() == accel.lower()), None)
+        if clash:
+            return f"«{clash['name']}»"
+        set_slots = set_accels(self.sets())
+        set_clash = next((rec for rec in self.sets()
+                          if (set_slots.get(rec["id"]) or "").lower() == accel.lower()), None)
+        return f"набором «{set_clash['name']}»" if set_clash else None
+
     def _set_hotkey(self, app_id, accel):
         if not app_id:
             self.refresh()
             return
         if accel:
-            if accel.lower() == (self.setting("launch_hotkey") or "").lower():
-                self.toast.error(f"{accel} уже занята — вызовом Centurio")
-                self.refresh()
-                return
-            clash = next((a for a in self.apps()
-                          if a["id"] != app_id
-                          and (a.get("hotkey") or "").lower() == accel.lower()), None)
-            if clash:
-                self.toast.error(f"{accel} уже занята — «{clash['name']}»")
+            holder = self._hotkey_clash(accel, skip_app_id=app_id)
+            if holder:
+                self.toast.error(f"{accel} уже занята — {holder}")
                 self.refresh()
                 return
         self.store.update_app(app_id, {"hotkey": accel})
-        self.on_library_changed()
         self.on_library_changed()
         self.toast.show(f"Горячая клавиша: {accel}" if accel else "Горячая клавиша убрана",
                         icon=ft.Icons.BOLT, icon_color=C.MUTED)
@@ -946,6 +960,21 @@ class CenturioUI:
         self.view.set_screen("grid")
         self.refresh()
 
+    def notify_hotkey_rejects(self, rejected):
+        """Surface combos the OS-level listener refused to bind.
+
+        HotkeyManager.register() quietly drops accelerators it can't parse
+        or that collide once translated to pynput's own syntax — a gap our
+        own clash checks in _hotkey_clash don't always catch (two different
+        accel strings can normalize to the same combo). Without this call
+        those bindings just don't work and nothing says why.
+        """
+        accels = [a for a in dict.fromkeys(rejected) if a]
+        if not accels:
+            return
+        self.toast.error("Не удалось назначить: " + ", ".join(accels)
+                         + " — комбинация занята или недоступна")
+
     def open_library(self):
         self.view.close_palette()
         self.view.set_screen("grid")
@@ -962,10 +991,9 @@ class CenturioUI:
         if not accel:
             self.refresh()
             return
-        clash = next((a for a in self.apps()
-                      if (a.get("hotkey") or "").lower() == accel.lower()), None)
-        if clash:
-            self.toast.error(f"{accel} уже занята — «{clash['name']}»")
+        holder = self._hotkey_clash(accel, check_launch=False)
+        if holder:
+            self.toast.error(f"{accel} уже занята — {holder}")
             self.refresh()
             return
         self.set_setting("launch_hotkey", accel)

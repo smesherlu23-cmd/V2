@@ -10,11 +10,18 @@ TTL = 2.0
 
 
 def snapshot(max_age: float = TTL) -> dict[int, str]:
+    """The pid->lowercased-name map, refreshed at most every `max_age` seconds.
+
+    Returns a copy: this is a module-level cache shared by every caller in
+    the process (the process monitor thread and any window-matching code
+    running alongside it), and handing out the live dict would let one
+    caller's mutation corrupt what everyone else reads.
+    """
     global _snapshot, _at
     now = time.monotonic()
     with _lock:
         if now - _at <= max_age:
-            return _snapshot
+            return dict(_snapshot)
     try:
         import psutil
     except Exception:
@@ -30,4 +37,4 @@ def snapshot(max_age: float = TTL) -> dict[int, str]:
     with _lock:
         _snapshot = fresh
         _at = now
-    return fresh
+    return dict(fresh)

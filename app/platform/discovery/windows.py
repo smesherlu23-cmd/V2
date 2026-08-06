@@ -1,3 +1,7 @@
+"""Discovers programs from the Start Menu and the registry's
+Uninstall/App Paths keys, via a PowerShell script that also
+extracts each one's icon."""
+
 from __future__ import annotations
 
 import json

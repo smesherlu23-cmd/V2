@@ -1,3 +1,8 @@
+"""Finds installed programs — Start Menu shortcuts, the
+uninstall/App Paths registry keys, Steam and Epic libraries — and
+re-exports the pieces other modules reach into directly (icon
+extraction, Steam art, first-run suggestions)."""
+
 from __future__ import annotations
 
 import os
