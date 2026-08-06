@@ -31,6 +31,10 @@ from .toast import Notifier, ToastHost
 
 WINDOW_TTL = 2.0
 TILE_CACHE_MAX = 600
+# Everything images.icon_image can actually draw. The picker used to offer
+# only PNG and SVG, so a plain .jpg — the format most icons come in — could
+# not even be selected in the file dialog.
+CATEGORY_IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg")
 
 class CenturioUI:
     def __init__(self, page: ft.Page, store: Store, launcher, controllers=None):
@@ -158,6 +162,10 @@ class CenturioUI:
     def _accent(self):
         return self._settings.get("accent", C.ACCENT)
 
+    def rail(self) -> dict:
+        """Pixel sizes for the category rail at the user's chosen scale."""
+        return C.rail_metrics(self._settings.get("rail_size", C.DEFAULT_RAIL_SIZE))
+
     def _window_width(self) -> float:
         win = getattr(self.page, "window", None)
         return getattr(win, "width", None) or C.LIBRARY_W
@@ -173,7 +181,7 @@ class CenturioUI:
         return self._window_width() < C.NARROW_INSPECTOR
 
     def _content_width(self) -> float:
-        width = self._window_width() - C.RAIL_W
+        width = self._window_width() - self.rail()["rail"]
         if self._show_sidebar():
             width -= C.SIDEBAR_W
         if self._inspector_visible() and not self._inspector_floats():
@@ -254,6 +262,7 @@ class CenturioUI:
                 bool(self._settings.get("calm")),
                 self._settings.get("accent", C.ACCENT),
                 bool(self._settings.get("game_posters", True)),
+                self._settings.get("rail_size", C.DEFAULT_RAIL_SIZE),
                 self.view.select_mode,
                 self.view.mode,
             )
@@ -293,6 +302,7 @@ class CenturioUI:
     def _refresh_library(self, content_only: bool):
         if not content_only:
             self.header_holder.content = self.chrome.build_header()
+            self.rail_container.width = self.rail()["rail"]
             self.rail_container.content = self.chrome.build_rail()
         show_sidebar = self._show_sidebar()
         self.sidebar_container.visible = show_sidebar
@@ -890,13 +900,13 @@ class CenturioUI:
                 self.refresh()
         picker.on_result = on_result
         picker.pick_files(dialog_title="Картинка категории", allow_multiple=False,
-                          allowed_extensions=["png", "svg"])
+                          allowed_extensions=[e.lstrip(".") for e in CATEGORY_IMAGE_EXTS])
 
     def _store_category_image(self, cat_id, src) -> str | None:
         import shutil
         suffix = Path(src).suffix.lower()
-        if suffix not in (".png", ".svg"):
-            self.toast.error("Подойдёт PNG или SVG")
+        if suffix not in CATEGORY_IMAGE_EXTS:
+            self.toast.error("Подойдёт PNG, JPG, WEBP, GIF или SVG")
             return None
         dest_dir = Path(self.icon_cache_dir()) / "categories"
         try:
@@ -907,6 +917,15 @@ class CenturioUI:
             log.exception("не удалось скопировать изображение категории")
             self.toast.error("Не удалось прочитать файл")
             return None
+        # A category keeps one picture, but the filename carries the format,
+        # so swapping a PNG for a JPG would otherwise leave the old file
+        # behind and nothing would ever point at it again.
+        for stale in dest_dir.glob(f"{cat_id}.*"):
+            if stale != dest:
+                try:
+                    stale.unlink()
+                except OSError:
+                    pass
         return str(dest)
 
     def clear_category_image(self, cat_id):
@@ -1104,9 +1123,12 @@ class CenturioUI:
             self.popover_layer.content = None
             return
         index = [c["id"] for c in self.categories()].index(cat_id)
-        top = C.HEADER_H + 14 + (2 + index) * (C.RAIL_BTN + 8) + 9
+        metrics = self.rail()
+        # Two fixed rail buttons (all-apps, sidebar toggle) and a divider sit
+        # above the categories, so the popover tracks the button it belongs to.
+        top = C.HEADER_H + 14 + (2 + index) * (metrics["btn"] + metrics["gap"]) + 9
         height = self._window_height()
-        self.popover_layer.left = C.RAIL_W + 8
+        self.popover_layer.left = metrics["rail"] + 8
         self.popover_layer.top = max(C.HEADER_H + 6, min(top, height - C.POPOVER_H - 8))
         self.popover_layer.content = screens.build_category_popover(self, cat)
         self.popover_layer.visible = True

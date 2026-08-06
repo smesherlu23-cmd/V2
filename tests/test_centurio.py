@@ -2901,7 +2901,23 @@ def test_ui_category_popover():
         ui.refresh()
         from app.ui import widgets
         glyph = widgets.cat_glyph(store.state()["categories"][0])
-        ok(isinstance(glyph, ft.Image), "and it is what the rail draws")
+        art = _find_control(glyph, lambda c: isinstance(c, ft.Image))
+        ok(art is not None, "and it is what the rail draws")
+        ok(art.fit == ft.ImageFit.COVER,
+           "cropped to fill like a Discord icon, not letterboxed inside the badge")
+        ok(getattr(glyph, "border_radius", None), "inside a circular clip")
+
+        # A category holds one picture: swapping formats must not leave the
+        # previous file orphaned in the cache with nothing pointing at it.
+        jpg = os.path.join(d, "mark.jpg")
+        __import__("PIL.Image", fromlist=["Image"]).new("RGB", (40, 24)).save(jpg)
+        swapped = ui._store_category_image(cat_id, jpg)
+        ok(swapped and swapped.endswith(".jpg"), "a JPG is accepted, not just PNG/SVG")
+        ok(not os.path.exists(stored), "and the previous file is cleaned up")
+
+        ok(ui._store_category_image(cat_id, os.path.join(d, "notes.txt")) is None,
+           "something that isn't an image is still refused")
+
         ui.clear_category_image(cat_id)
         ok(store.state()["categories"][0]["image"] is None, "it can be taken off again")
 

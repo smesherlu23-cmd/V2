@@ -84,6 +84,7 @@ def _settings_view(ui):
     return [
         _group("АКЦЕНТ", swatches),
         _group("ПЛОТНОСТЬ", _tile_segments(ui)),
+        _group("ПОЛОСА КАТЕГОРИЙ", _rail_segments(ui)),
         ft.Container(height=1, bgcolor=C.LINE_2),
         _switch(ui, "Показывать «Быстрый запуск»", "Лента закреплённых сверху библиотеки",
                 "show_quick_row"),
@@ -177,16 +178,25 @@ def _switch(ui, title, sub, key):
                 on_click=lambda k=key, v=value: ui.set_setting(k, not v))
 
 
-def _tile_segments(ui):
+def _segments(ui, key, default, options):
     def segment(label, value):
-        active = ui.setting("tile_size", "large") == value
+        active = ui.setting(key, default) == value
         return ft.Container(
             T(label, size=12, weight=ft.FontWeight.W_600 if active else ft.FontWeight.W_400,
               color=C.TEXT if active else C.MUTED),
             height=26, padding=ft.padding.symmetric(0, 12), border_radius=6,
             bgcolor=C.PANEL_ACTIVE if active else None, alignment=ft.alignment.center,
-            on_click=lambda e: ui.set_setting("tile_size", value))
-    return ft.Container(ft.Row([segment("Крупные", "large"), segment("Плотные", "compact")],
-                               spacing=0),
+            on_click=lambda e, v=value: ui.set_setting(key, v))
+    return ft.Container(ft.Row([segment(label, value) for label, value in options], spacing=0),
                         bgcolor=C.PANEL, border=ft.border.all(1, C.SEGMENT_BORDER),
                         border_radius=8, padding=ft.padding.all(2))
+
+
+def _tile_segments(ui):
+    return _segments(ui, "tile_size", "large",
+                     (("Крупные", "large"), ("Плотные", "compact")))
+
+
+def _rail_segments(ui):
+    return _segments(ui, "rail_size", C.DEFAULT_RAIL_SIZE,
+                     (("Обычная", "normal"), ("Крупная", "large"), ("Огромная", "huge")))
