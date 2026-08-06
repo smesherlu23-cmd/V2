@@ -1,3 +1,8 @@
+"""Fractional window-layout math for sets.
+
+Slot rectangles for the full/half/60-40/grid4 presets, and the
+pixel <-> fraction conversions used to place and capture real windows."""
+
 from __future__ import annotations
 
 PRESETS = ("full", "6040", "half", "grid4")

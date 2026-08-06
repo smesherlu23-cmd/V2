@@ -1,3 +1,8 @@
+"""Accelerator parsing and the global-hotkey listener (pynput).
+
+Also assigns the automatic Ctrl+1..9 / Ctrl+Alt+1..9 quick-launch
+slots and checks accelerators against Windows' own reserved combos."""
+
 from __future__ import annotations
 
 from ..infra import log

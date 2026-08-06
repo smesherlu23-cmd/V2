@@ -1,3 +1,7 @@
+"""Starts programs (plain, elevated, or via steam://) and tracks
+which of them are currently running by polling process names
+against each app's tracked executable."""
+
 from __future__ import annotations
 
 import ntpath
@@ -76,10 +80,6 @@ class Launcher:
             self._wake.set()
 
     def start_monitor(self, interval: float = 4.0, idle_interval: float = 25.0):
-        try:
-            pass
-        except Exception:
-            return False
         with self._lock:
             if self._monitor_stop:
                 return True

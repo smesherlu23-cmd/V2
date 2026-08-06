@@ -1,3 +1,7 @@
+"""Pure functions over the store's data — sorting, section building,
+search-palette ranking, category suggestions — kept free of Flet
+and the store so they're trivial to test."""
+
 from __future__ import annotations
 
 from .text import plu_programs, plu_windows, short_ago

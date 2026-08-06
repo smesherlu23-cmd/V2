@@ -1,3 +1,7 @@
+"""Reads Desktop and Startup shortcut names, used to rank freshly
+discovered programs by how likely the user actually cares about
+them during onboarding."""
+
 from __future__ import annotations
 
 import os

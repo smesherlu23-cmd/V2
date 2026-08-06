@@ -1,3 +1,8 @@
+"""The on-disk data store: apps, categories, sets, the inbox queue
+and settings, behind one lock, with atomic writes, debounced
+persistence for high-frequency updates, and recovery paths for a
+corrupt or newer-schema file."""
+
 from __future__ import annotations
 
 import copy

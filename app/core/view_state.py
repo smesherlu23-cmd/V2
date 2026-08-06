@@ -1,3 +1,8 @@
+"""All UI state that isn't app data: the active filter/sort/screen,
+palette and selection state, hotkey-capture mode. Kept separate
+from CenturioUI so what's transient view state and what's
+persisted data stays visible at a glance."""
+
 from __future__ import annotations
 
 from . import queries
@@ -54,9 +59,14 @@ class ViewState:
         return self.filter == "all"
 
     def persist(self):
+        # Every filter click, sort change and arrow-key move through a
+        # section calls this. The first two calls only touch the in-memory
+        # dict (persist=False); debouncing the final write means a run of
+        # clicks costs one delayed disk write instead of one synchronous
+        # write each — collapsed sections already use the same debounce.
         self.store.set_setting("view_filter", self.filter, persist=False)
         self.store.set_setting("view_sort", self.sort, persist=False)
-        self.store.set_setting("view_mode", self.mode)
+        self.store.set_setting("view_mode", self.mode, persist="debounce")
 
     def set_filter(self, f):
         self.filter = f
