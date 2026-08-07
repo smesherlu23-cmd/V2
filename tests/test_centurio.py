@@ -1245,6 +1245,43 @@ def test_discovery():
        "system filter drops runtimes like Node.js")
     ok(discovery._is_windows_system("Google Chrome", r"C:\Program Files\Google\Chrome\chrome.exe") is False,
        "system filter keeps real apps")
+
+    # Каждая строка ниже — то, что «Найти и добавить» реально предлагал.
+    # Все они проходили фильтр по названию: у записи в реестре имя честное
+    # («Steam»), а мусорный на самом деле путь, так что решает именно он.
+    for name, path in (
+        ("Steam", r"C:\Program Files (x86)\Steam\uninstall.exe"),
+        ("Rockstar Games SDK",
+         r"C:\Program Files\Rockstar Games\Social Club\uninstallRGSCRedistributable.exe"),
+        ("Paradox Launcher v2",
+         r"C:\Users\A\AppData\Local\Package Cache\{f0c}\LauncherInstallerBundle.exe"),
+        ("Python 3.14.4 (64-bit)",
+         r"C:\Users\A\AppData\Local\Package Cache\{21b}\python-3.14.4-amd64.exe"),
+        ("TabTip", r"C:\Program Files\Common Files\microsoft shared\ink\TabTip.exe"),
+        ("wab", r"C:\Program Files\Windows Mail\wab.exe"),
+        ("wabmig", r"C:\Program Files\Windows Mail\wabmig.exe"),
+        ("SKYPESERVER",
+         r"C:\Program Files\Microsoft Office\Root\Office16\SkypeSrv\SKYPESERVER.EXE"),
+        ("MSOXMLED", r"C:\Program Files\Microsoft Office\Root\Office16\MSOXMLED.EXE"),
+    ):
+        ok(discovery._is_windows_system(name, path) is True,
+           f"«{name}» is installer/component plumbing, not a program to offer")
+
+    # …и ровно та же чистка не должна съесть настоящие программы, включая
+    # те, что лежат в одной папке с офисным мусором.
+    for name, path in (
+        ("Word", r"C:\Program Files\Microsoft Office\Root\Office16\WINWORD.EXE"),
+        ("Excel", r"C:\Program Files\Microsoft Office\Root\Office16\EXCEL.EXE"),
+        ("Steam", r"C:\Program Files (x86)\Steam\steam.exe"),
+        ("Rockstar Games Launcher", r"C:\Program Files\Rockstar Games\Launcher\Launcher.exe"),
+        ("NVIDIA App", r"C:\Program Files\NVIDIA Corporation\NVIDIA App\NVIDIA App.exe"),
+        ("Telegram Desktop", r"C:\Users\A\AppData\Roaming\Telegram Desktop\Telegram.exe"),
+        ("7-Zip File Manager", r"C:\Program Files\7-Zip\7zFM.exe"),
+        ("Terminal", r"shell:AppsFolder\Microsoft.WindowsTerminal_8wekyb3d8bbwe!App"),
+    ):
+        ok(discovery._is_windows_system(name, path) is False,
+           f"«{name}» is a real program and survives the cleanup")
+
     ok(discovery._vdf_val('"appid" "570" "name" "Dota 2"', "appid") == "570", "vdf value parsed")
     ok(discovery._vdf_val("nothing", "name") is None, "vdf missing key -> None")
     ok("228980" in discovery._STEAM_SKIP_ID, "steam redistributables skipped")
@@ -1519,6 +1556,19 @@ def test_launch_options():
     finally:
         if real_startfile is not None:
             os.startfile = real_startfile
+
+    # A Store app is a package id, not a file: it has to reach the shell
+    # without going through the "does this path exist" check that every
+    # on-disk program takes.
+    opened = []
+    shell_launcher = Launcher()
+    shell_launcher._open_with_os = opened.append
+    store = r"shell:AppsFolder\Microsoft.WindowsTerminal_8wekyb3d8bbwe!App"
+    res = shell_launcher.launch({"id": "s", "path": store})
+    ok(res.get("ok") is True and opened == [store],
+       "a Store app is handed to the shell verbatim")
+    ok(shell_launcher.launch({"id": "m", "path": r"C:\nope\gone.exe"}).get("ok") is False,
+       "while an ordinary missing file is still reported missing")
 
 
 def test_data_ops():
