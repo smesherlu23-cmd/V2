@@ -149,8 +149,6 @@ def _settings_library(ui):
         ft.Container(height=1, bgcolor=C.LINE_2),
         _switch(ui, "Подробный лог", "Для отчёта о проблеме — нужен перезапуск",
                 "debug_log"),
-        _row(ui, "Первый запуск", "Показать приветствие ещё раз",
-             Wg.outline_btn("Показать", ui.show_onboarding, ft.Icons.FLAG, height=32)),
     ]
 
 

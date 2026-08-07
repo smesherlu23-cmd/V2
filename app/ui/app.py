@@ -14,7 +14,7 @@ from ..controllers.triage import TriageController
 from ..core import queries
 from ..core.hotkeys import normalize_accel, resolve_accels
 from ..core.store import DEFAULT_LAUNCH_HOTKEY, Store
-from ..core.text import plu_apps, plu_programs, plu_windows
+from ..core.text import plu_apps, plu_windows
 from ..core.view_state import ViewState
 from ..infra import log
 from ..platform import windows as W
@@ -82,7 +82,14 @@ class CenturioUI:
             text_size=13.5, color=C.WHITE,
             hint_style=ft.TextStyle(color=C.MUTED_2, size=13.5),
             cursor_color=C.ACCENT, on_change=self._on_search,
-            on_focus=lambda e: self._open_palette(), expand=True,
+            # A click is a deliberate "I want to search" — on_focus fired for
+            # any reason the field regained focus, including the window
+            # simply coming back to the front after being hidden to the tray
+            # or toggled by the launch hotkey, which reopened the palette on
+            # top of the plain library the user actually asked to see.
+            # always_call_on_tap: fire every click, not only the one that
+            # first gives the field focus.
+            on_click=lambda e: self._open_palette(), always_call_on_tap=True, expand=True,
         )
         self.search_icon = ft.Icon(ft.Icons.SEARCH, size=15, color=C.MUTED_2)
         self.search_tail = ft.Container()
@@ -129,7 +136,6 @@ class CenturioUI:
             ft.Row([self.bulk_card], alignment=ft.MainAxisAlignment.CENTER),
             left=0, right=0, bottom=26, visible=False)
         self.popover_layer = ft.Container(visible=False)
-        self.onboarding_layer = ft.Container(left=0, top=0, right=0, bottom=0, visible=False)
 
     @property
     def _snapshot(self):
@@ -226,7 +232,7 @@ class CenturioUI:
         self.library_body.content = ft.Column([self.header_holder, body],
                                               spacing=0, expand=True)
         root = ft.Stack([self.body, self.inspector_overlay, self.palette_layer,
-                         self.bulk_layer, self.popover_layer, self.onboarding_layer,
+                         self.bulk_layer, self.popover_layer,
                          self.menu.control, self.toast.control], expand=True)
         self.page.add(root)
         self.refresh()
@@ -284,7 +290,6 @@ class CenturioUI:
                 self._render_bulk_bar()
                 self.chrome.sync_search_box(self._palette_count)
                 self._render_popover()
-                self._render_onboarding()
                 self._trim_tile_cache()
             finally:
                 self._snapshot = None
@@ -344,7 +349,6 @@ class CenturioUI:
                 self._render_bulk_bar()
                 self.chrome.sync_search_box(self._palette_count)
                 self._render_popover()
-                self._render_onboarding()
             finally:
                 self._snapshot = None
             self.page.update()
@@ -401,7 +405,7 @@ class CenturioUI:
         return next((r["app"] for r in rows if r["kind"] == "app"), None)
 
     def _render_palette(self):
-        if not self.view.palette_open or self.view.onboarding:
+        if not self.view.palette_open:
             self._palette_count = 0
             self.palette_layer.visible = False
             self.palette_card.content = None
@@ -1087,58 +1091,6 @@ class CenturioUI:
     def icon_cache_dir(self) -> str:
         return str(Path(self.store.path).parent / "icons")
 
-    def maybe_onboard(self):
-        if self.setting("onboarded") or self.apps():
-            return
-        self.show_onboarding()
-
-    def show_onboarding(self):
-        self.view.onboarding = True
-        self.view.onboarding_sel = set()
-        self.scan.start_scan()
-        self.refresh()
-
-    def close_onboarding(self):
-        self.view.onboarding = False
-        self.set_setting("onboarded", True)
-
-    def onboarding_items(self):
-        from ..platform import discovery
-        found = self.scan.cached_discovery()
-        if found is None:
-            return []
-        existing = {(a.get("path") or "").lower() for a in self.apps()}
-        fresh = [f for f in found if (f.get("path") or "").lower() not in existing]
-        return discovery.suggest_first_run(fresh)
-
-    def toggle_onboarding(self, key):
-        picked = getattr(self.view, "onboarding_sel", set())
-        if key in picked:
-            picked.discard(key)
-        else:
-            picked.add(key)
-        self.view.onboarding_sel = picked
-        self.refresh()
-
-    def commit_onboarding(self):
-        picked = getattr(self.view, "onboarding_sel", set())
-        chosen = [s["app"] for s in self.onboarding_items()
-                  if (s["app"].get("path") or "").lower() in picked]
-        if not chosen:
-            self.close_onboarding()
-            return
-        self.store.add_apps([{
-            "name": item.get("name"), "path": item.get("path"), "icon": item.get("icon"),
-            "icon_fit": item.get("icon_fit"), "sub": item.get("sub", ""),
-            "track_exe": item.get("track_exe"), "poster": item.get("poster"),
-            "category_id": queries.suggest_category(item, self.categories()),
-            "quick": True} for item in chosen])
-        self.view.onboarding = False
-        self.store.set_setting("onboarded", True)
-        self.toast.show(f"Готово — {len(chosen)} {plu_programs(len(chosen))} в быстром запуске")
-        self.on_library_changed()
-        self.scan.backfill_icons_async()
-
     def _render_popover(self):
         cat_id = self.view.popover
         cat = next((c for c in self.categories() if c["id"] == cat_id), None)
@@ -1161,14 +1113,6 @@ class CenturioUI:
         self.popover_layer.top = max(C.HEADER_H + 6, min(top, height - C.POPOVER_H - 8))
         self.popover_layer.content = screens.build_category_popover(self, cat)
         self.popover_layer.visible = True
-
-    def _render_onboarding(self):
-        if not self.view.onboarding:
-            self.onboarding_layer.visible = False
-            self.onboarding_layer.content = None
-            return
-        self.onboarding_layer.content = screens.build_onboarding(self)
-        self.onboarding_layer.visible = True
 
     def safe_refresh(self):
         try:

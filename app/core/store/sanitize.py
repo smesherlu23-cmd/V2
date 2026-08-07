@@ -45,7 +45,6 @@ DEFAULT_SETTINGS = {
     "calm": False,
     "hints": True,
     "debug_log": False,
-    "onboarded": False,
     "collapsed": [],
 }
 
@@ -224,7 +223,7 @@ def clean_records(raw, clean) -> list[dict]:
 _BOOL_SETTINGS = {
     "autostart", "minimize_to_tray", "close_to_tray", "show_quick_row",
     "game_posters", "auto_rescan", "win_max", "hide_after", "triage",
-    "calm", "hints", "debug_log", "onboarded",
+    "calm", "hints", "debug_log",
 }
 
 _STR_SETTINGS = {"accent", "tile_size", "rail_size", "view_filter", "view_sort",

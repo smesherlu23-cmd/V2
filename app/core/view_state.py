@@ -53,8 +53,6 @@ class ViewState:
         self.add_sel: set[str] = set()
         self.add_cat: dict[str, str] = {}
 
-        self.onboarding = False
-
     def is_all_view(self):
         return self.filter == "all"
 

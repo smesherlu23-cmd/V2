@@ -3278,7 +3278,7 @@ def test_ui_settings_screen():
                         "Прятать окно после запуска"),
             "library": ("Складывать новое в разбор", "Проверять новое раз в 15 минут",
                         "Кэш иконок", "Копия библиотеки", "Файл библиотеки",
-                        "Подробный лог", "Первый запуск"),
+                        "Подробный лог"),
         }
         for tab, rows in expected.items():
             ui.set_settings_tab(tab)
@@ -3309,48 +3309,36 @@ def test_ui_settings_screen():
 
 
 def test_ui_first_run():
+    """A first run drops straight into the plain empty-library grid.
+
+    There used to be a "чем пользуетесь каждый день" picker modal on top
+    of it (auto-shown once, replayable from settings) — removed because it
+    duplicated the Add screen's own checklist for no real benefit while
+    adding a whole extra screen, an "onboarded" flag, and a second
+    scan-and-suggest code path to keep in sync with the first one.
+    """
     try:
-        from app.platform import discovery
         from app.ui.app import CenturioUI  # noqa: F401
     except Exception as exc:
         skip("UI first-run test", exc)
         return
 
-    found = [{"name": "Chrome", "path": "C:/pf/chrome.exe", "source": "startmenu"},
-             {"name": "Telegram", "path": "C:/pf/tg.exe", "source": "startmenu"}]
-    real_discover = discovery.discover_apps
-    real_suggest = discovery.suggest_first_run
-    before = set(__import__("threading").enumerate())
-    try:
-        discovery.discover_apps = (
-            lambda icon_cache=None, on_progress=None, report=None: list(found))
-        discovery.suggest_first_run = (
-            lambda items, limit=8: [{"app": i, "hint": "в автозагрузке"} for i in items])
-        with tempfile.TemporaryDirectory() as d:
-            store = Store(os.path.join(d, "data.json"))
-            ui, _ = _ui_for(store)
+    with tempfile.TemporaryDirectory() as d:
+        store = Store(os.path.join(d, "data.json"))
+        ui, _ = _ui_for(store)
 
-            ui.maybe_onboard()
-            ok(ui.view.onboarding, "an empty library is offered the first-run screen")
-            ok(_settle_threads(before), "its scan finishes")
-            ui.refresh()
-            ok(any("в автозагрузке" in t for t in _texts(ui.onboarding_layer.content)),
-               "each suggestion says why it was suggested")
+        ok("Библиотека пуста" in _texts(ui.body),
+           "an empty library shows the ordinary empty state, not a modal")
+        ok(not ui.popover_layer.visible and not ui.bulk_layer.visible
+           and not ui.palette_layer.visible,
+           "nothing is popped open over it uninvited")
 
-            ui.toggle_onboarding("c:/pf/chrome.exe")
-            ui.commit_onboarding()
-            ok([a["name"] for a in store.state()["apps"]] == ["Chrome"],
-               "only the ticked programs are added")
-            ok(store.state()["apps"][0]["quick"] is True, "and they go to the quick strip")
-
-            ui.maybe_onboard()
-            ok(not ui.view.onboarding, "the screen doesn't come back on the next start")
-            ui.show_onboarding()
-            ok(ui.view.onboarding, "but «Показать первый запуск» brings it back")
-    finally:
-        discovery.discover_apps = real_discover
-        discovery.suggest_first_run = real_suggest
-        _settle_threads(before)
+        for gone in ("maybe_onboard", "show_onboarding", "close_onboarding",
+                    "onboarding_items", "toggle_onboarding", "commit_onboarding"):
+            ok(not hasattr(ui, gone), f"the onboarding picker ({gone}) is gone for good")
+        ok(not hasattr(ui, "onboarding_layer"), "and so is its overlay")
+        ok("onboarded" not in store.state()["settings"],
+           "along with the flag that used to gate it")
 
 
 def test_toast_lifecycle():

@@ -138,12 +138,6 @@ def main(page: ft.Page):
         _hide_window(page)
         set_visible(False)
 
-    def open_search():
-        ui = ui_holder.get("ui")
-        show_window()
-        if ui is not None:
-            ui._focus_search()
-
     def open_library():
         ui = ui_holder.get("ui")
         show_window()
@@ -243,7 +237,7 @@ def main(page: ft.Page):
                  for item in screens.tray_items(store)]
         return items, screens.library_summary(store)
 
-    tray = TrayController(tray_icon_path(ASSETS_DIR), on_show=open_search, on_quit=quit_app,
+    tray = TrayController(tray_icon_path(ASSETS_DIR), on_show=open_library, on_quit=quit_app,
                           on_open_library=open_library, menu_provider=tray_menu)
 
     ui = CenturioUI(page, store, launcher, controllers)
@@ -359,7 +353,6 @@ def main(page: ft.Page):
         tray.start()
         if start_hidden:
             hide_window()
-    ui.maybe_onboard()
 
 
 def _ordered_sets(state) -> list[dict]:
