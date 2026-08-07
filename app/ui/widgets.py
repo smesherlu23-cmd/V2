@@ -7,10 +7,29 @@ from .format import T, cat_icon
 from .images import icon_image, is_launcher_art
 
 
+def safe_update(control) -> None:
+    """Update a control without crashing on a stale event.
+
+    Flet delivers hover/drag callbacks from a background thread pool, so a
+    handler can still fire after its control was rebuilt away — evicted
+    from the tile cache, the screen switched, a refresh replaced the tree —
+    and by the time it runs, the control's `page` link is already gone.
+    `control.update()` asserts on that instead of failing quietly, which
+    otherwise surfaces as noise in the console (or a real crash on some
+    Flet versions) for something the user never notices in the UI.
+    """
+    try:
+        if control.page:
+            control.update()
+    except Exception:
+        from ..infra import log
+        log.exception("сбой при обновлении контрола после устаревшего события")
+
+
 def hoverable(container: ft.Container, normal, hover) -> ft.Container:
     def on_hover(e):
         container.bgcolor = hover if e.data == "true" else normal
-        container.update()
+        safe_update(container)
     container.bgcolor = normal
     container.on_hover = on_hover
     return container
@@ -118,7 +137,7 @@ def win_btn(icon_name, tooltip, handler, danger=False):
         else:
             c.bgcolor = None
             c.content.color = C.MUTED
-        c.update()
+        safe_update(c)
     c.on_hover = on_hover
     c.tooltip = tooltip
     return c

@@ -62,6 +62,7 @@ class CenturioUI:
         self._visible = True
         self._dirty = False
         self._capture_active = False
+        self._rail_scroll = 0.0
 
         self.toast = ToastHost(page)
         self.notify = Notifier(self.toast)
@@ -1125,8 +1126,13 @@ class CenturioUI:
         index = [c["id"] for c in self.categories()].index(cat_id)
         metrics = self.rail()
         # Two fixed rail buttons (all-apps, sidebar toggle) and a divider sit
-        # above the categories, so the popover tracks the button it belongs to.
-        top = C.HEADER_H + 14 + (2 + index) * (metrics["btn"] + metrics["gap"]) + 9
+        # above the categories, so the popover tracks the button it belongs
+        # to. The categories themselves scroll independently of that fixed
+        # header, so their on-screen position also shifts by however far
+        # the rail has been scrolled (_rail_scroll, updated by the rail's
+        # own on_scroll — see Chrome._on_rail_scroll).
+        top = (C.HEADER_H + 14 + (2 + index) * (metrics["btn"] + metrics["gap"]) + 9
+               - self._rail_scroll)
         height = self._window_height()
         self.popover_layer.left = metrics["rail"] + 8
         self.popover_layer.top = max(C.HEADER_H + 6, min(top, height - C.POPOVER_H - 8))
