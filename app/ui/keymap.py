@@ -18,10 +18,6 @@ class Keymap:
         if self.ui.menu.open and key == "Escape":
             self.ui.menu.close()
             return
-        if self.ui.view.onboarding:
-            if key == "Escape":
-                self.ui.close_onboarding()
-            return
         if e.ctrl and key.lower() == "k":
             self.ui._focus_search()
             return
