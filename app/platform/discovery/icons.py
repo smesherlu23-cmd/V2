@@ -35,6 +35,13 @@ def resolve_icon_for(path: str, icon_cache: str | None = None) -> tuple[str | No
                 return icon, fit
         dl = steam_art._steam_cdn_art(appid, icon_cache)
         return (dl, "cover") if dl else (None, "contain")
+    if path.lower().startswith("shell:appsfolder\\"):
+        try:
+            if os.name == "nt":
+                return windows._win_extract_store_one(path, icon_cache), "contain"
+        except Exception:
+            log.exception("resolve_icon_for (Store) failed for %s", path)
+        return None, "contain"
     try:
         if os.name == "nt" and path.lower().endswith(".exe") and os.path.exists(path):
             return windows._win_extract_one(path, icon_cache), "contain"
