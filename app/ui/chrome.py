@@ -68,12 +68,18 @@ class Chrome:
 
     def _rail_item(self, glyph, active, on_click, tooltip, fixed_color=None,
                    on_drop_app=None, on_context=None, badge=None, outlined=False):
+        btn = self.ui.rail()["btn"]
+        # Discord's squircle-on-select: a circle at rest, rounded square when
+        # active. Both radii track the button so the shape reads the same at
+        # every rail scale.
+        round_r, square_r = btn / 2, btn / 3
         inner = ft.Container(
-            glyph, width=C.RAIL_BTN, height=C.RAIL_BTN,
-            border_radius=14 if active else 21,
+            glyph, width=btn, height=btn,
+            border_radius=square_r if active else round_r,
             bgcolor=C.PANEL_ACTIVE if active else C.RAIL_BTN_BG,
             border=ft.border.all(1, C.LINE_4) if outlined else None,
             alignment=ft.alignment.center, tooltip=tooltip,
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
             animate=ft.Animation(C.ANIM_BAR, ft.AnimationCurve.EASE_OUT),
         )
 
@@ -82,7 +88,7 @@ class Chrome:
                 return
             highlight = e.data == "true"
             inner.bgcolor = C.PANEL_ACTIVE if highlight else C.RAIL_BTN_BG
-            inner.border_radius = 14 if highlight else 21
+            inner.border_radius = square_r if highlight else round_r
             if fixed_color is None and isinstance(inner.content, ft.Icon):
                 inner.content.color = C.TEXT if highlight else C.MUTED
             inner.update()
@@ -91,7 +97,7 @@ class Chrome:
         button = inner
         if badge is not None:
             button = ft.Stack([inner, ft.Container(badge, right=-3, top=-3)],
-                              width=C.RAIL_BTN + 6, height=C.RAIL_BTN + 6)
+                              width=btn + 6, height=btn + 6)
 
         tapper = ft.GestureDetector(
             button, mouse_cursor=ft.MouseCursor.CLICK,
@@ -120,7 +126,8 @@ class Chrome:
             content = ft.DragTarget(group="apps", content=tapper,
                                     on_accept=_accept, on_will_accept=_will, on_leave=_leave)
 
-        bar = ft.Container(width=3, height=26, border_radius=ft.border_radius.only(0, 3, 0, 3),
+        bar = ft.Container(width=3, height=round(btn * 0.62),
+                           border_radius=ft.border_radius.only(0, 3, 0, 3),
                            bgcolor=self.ui._accent()) if active else ft.Container(width=3)
         return ft.Row([bar, ft.Container(content, expand=True, alignment=ft.alignment.center)],
                       spacing=0)
@@ -136,27 +143,30 @@ class Chrome:
         on_grid = self.ui.view.screen == "grid" and not self.ui.view.active_set
         all_active = self.ui.is_all_view() and on_grid
         waiting = len(self.ui.inbox())
+        metrics = self.ui.rail()
+        btn, glyph, gap = metrics["btn"], metrics["glyph"], metrics["gap"]
         items = [
-            self._rail_item(ft.Icon(ft.Icons.GRID_VIEW, size=19,
+            self._rail_item(ft.Icon(ft.Icons.GRID_VIEW, size=glyph,
                                     color=C.TEXT if all_active else C.MUTED),
                             all_active, lambda: self.ui._set_filter("all"), "Все программы"),
-            self._rail_item(ft.Icon(ft.Icons.VIEW_SIDEBAR, size=18,
+            self._rail_item(ft.Icon(ft.Icons.VIEW_SIDEBAR, size=glyph - 1,
                                     color=C.TEXT if self.ui.view.sidebar_open else C.MUTED),
                             self.ui.view.sidebar_open, lambda: self.ui._toggle_sidebar(),
                             "Показать/скрыть панель"),
-            ft.Container(width=30, height=1, bgcolor=C.LINE_2,
+            ft.Container(width=round(btn * 0.72), height=1, bgcolor=C.LINE_2,
                          margin=ft.margin.symmetric(3, 0)),
         ]
         for cat in self.ui.categories():
             active = self.ui.view.filter == f"category:{cat['id']}" and on_grid
             items.append(self._rail_item(
-                Wg.cat_glyph(cat, color=C.TEXT if active else None), active,
+                Wg.cat_glyph(cat, size=glyph, color=C.TEXT if active else None,
+                             fill=btn), active,
                 lambda cid=cat["id"]: self.ui._set_filter(f"category:{cid}"), cat["name"],
                 fixed_color=C.category_color(cat),
                 on_drop_app=lambda ids, cid=cat["id"]: self.ui._move_apps_to_category(ids, cid),
                 on_context=lambda e, c=cat: self.ui.context_menus.category_menu(c, e)))
-        add = ft.Container(ft.Icon(ft.Icons.ADD, size=16, color=C.TEXT_FAINT),
-                           width=C.RAIL_BTN, height=C.RAIL_BTN, border_radius=21,
+        add = ft.Container(ft.Icon(ft.Icons.ADD, size=glyph - 3, color=C.TEXT_FAINT),
+                           width=btn, height=btn, border_radius=btn / 2,
                            alignment=ft.alignment.center,
                            border=ft.border.all(1.5, C.CONTROL),
                            on_click=lambda e: self.ui._add_category(),
@@ -167,20 +177,20 @@ class Chrome:
                   ft.Container(expand=True)]
         triage_active = self.ui.view.screen == "triage"
         items.append(self._rail_item(
-            ft.Icon(ft.Icons.INBOX, size=18, color=C.TEXT if triage_active else C.TEXT_2),
+            ft.Icon(ft.Icons.INBOX, size=glyph - 1, color=C.TEXT if triage_active else C.TEXT_2),
             triage_active, lambda: self.ui.open_triage(),
             f"Разбор · {waiting}" if waiting and not self.ui.calm() else "Разбор",
             badge=self._inbox_badge(waiting) if waiting and not self.ui.calm() else None,
             outlined=True))
-        settings = ft.Container(ft.Icon(ft.Icons.SETTINGS, size=18,
+        settings = ft.Container(ft.Icon(ft.Icons.SETTINGS, size=glyph - 1,
                                         color=C.TEXT if self.ui.view.screen == "settings"
                                         else C.MUTED_2),
-                                width=C.RAIL_BTN, height=C.RAIL_BTN, border_radius=21,
+                                width=btn, height=btn, border_radius=btn / 2,
                                 alignment=ft.alignment.center,
                                 on_click=lambda e: self.ui._open_settings(), tooltip="Настройки")
         items += [ft.Container(height=4), settings]
         return ft.Container(
-            ft.Column(items, spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            ft.Column(items, spacing=gap, horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                       expand=True),
             padding=ft.padding.only(0, 14, 0, 12),
             border=ft.border.only(right=ft.BorderSide(1, C.LINE_2)), expand=True,

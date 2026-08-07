@@ -26,6 +26,7 @@ DEFAULT_SETTINGS = {
     "close_to_tray": True,
     "accent": "#f5f5f7",
     "tile_size": "large",
+    "rail_size": "normal",
     "show_quick_row": True,
     "game_posters": True,
     "auto_rescan": False,
@@ -226,8 +227,8 @@ _BOOL_SETTINGS = {
     "calm", "hints", "debug_log", "onboarded",
 }
 
-_STR_SETTINGS = {"accent", "tile_size", "view_filter", "view_sort", "view_mode",
-                 "launch_hotkey"}
+_STR_SETTINGS = {"accent", "tile_size", "rail_size", "view_filter", "view_sort",
+                 "view_mode", "launch_hotkey"}
 
 _INT_OR_NONE_SETTINGS = {"win_w", "win_h", "win_x", "win_y"}
 

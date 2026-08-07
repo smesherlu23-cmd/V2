@@ -128,11 +128,32 @@ def cat_glyph_name(cat) -> str:
     return (cat or {}).get("icon") or "folder"
 
 
-def cat_glyph(cat, size=19, color=None):
+def cat_image(cat, size: int, fill: int | None = None):
+    """A category's own picture, cropped to a circle the way Discord does.
+
+    COVER inside a circular clip means a wide logo or a screenshot fills the
+    badge instead of being letterboxed inside it — CONTAIN left transparent
+    bars above and below anything that wasn't already square, which is what
+    made uploaded art read as a thumbnail rather than an icon.
+
+    `fill` lets the rail hand in the button size so the picture reaches the
+    edges there, while inline uses (section heads, menus) stay glyph-sized.
+    """
+    path = (cat or {}).get("image")
+    if not path:
+        return None
+    box = fill or (size + 3)
+    art = icon_image(path, width=box, height=box, fit=ft.ImageFit.COVER)
+    if art is None:
+        return None
+    return ft.Container(art, width=box, height=box, border_radius=box / 2,
+                        clip_behavior=ft.ClipBehavior.ANTI_ALIAS)
+
+
+def cat_glyph(cat, size=19, color=None, fill: int | None = None):
     col = color or (C.category_color(cat) if cat else C.MUTED)
     if cat:
-        custom = icon_image(cat.get("image"), width=size + 3, height=size + 3,
-                            fit=ft.ImageFit.CONTAIN)
+        custom = cat_image(cat, size, fill)
         if custom is not None:
             return custom
     return ft.Icon(cat_icon(cat_glyph_name(cat)), size=size, color=col)

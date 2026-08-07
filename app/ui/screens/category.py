@@ -7,6 +7,44 @@ from .. import widgets as Wg
 from ..format import ICON_PACK, T, cat_icon
 from .common import _caps, _field
 
+AVATAR = 52
+
+
+def _image_row(ui, cat):
+    """The Discord-style avatar block: click the circle to upload.
+
+    The circle is the control, not a label next to one — that's what makes
+    it read as "put a picture here" rather than as a preview of a setting
+    that lives somewhere else.
+    """
+    has_image = bool(cat.get("image"))
+    art = Wg.cat_image(cat, AVATAR, fill=AVATAR) if has_image else None
+    if art is None:
+        art = ft.Container(
+            ft.Icon(ft.Icons.ADD_A_PHOTO, size=19, color=C.MUTED),
+            width=AVATAR, height=AVATAR, border_radius=AVATAR / 2, bgcolor=C.BG_1,
+            border=ft.border.all(1, C.DASHED), alignment=ft.alignment.center)
+
+    avatar = ft.Container(
+        art, width=AVATAR, height=AVATAR, border_radius=AVATAR / 2,
+        tooltip="Заменить картинку" if has_image else "Выбрать картинку",
+        on_click=lambda e: ui.pick_category_image(cat["id"]))
+
+    buttons = [Wg.link_btn("Заменить" if has_image else "Выбрать",
+                           lambda: ui.pick_category_image(cat["id"]))]
+    if has_image:
+        buttons.append(Wg.link_btn("Убрать", lambda: ui.clear_category_image(cat["id"])))
+
+    return ft.Container(
+        ft.Row([avatar,
+                ft.Column([T("Своя картинка", size=12.5, color=C.TEXT_2),
+                           T("PNG, JPG, WEBP, GIF или SVG", size=10.5, color=C.TEXT_DIM),
+                           ft.Row(buttons, spacing=14, tight=True)],
+                          spacing=4, expand=True, tight=True)],
+               spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        border=ft.border.all(1, C.LINE_4), border_radius=12,
+        padding=ft.padding.symmetric(10, 12), margin=ft.margin.only(top=10))
+
 
 def build_category_popover(ui, cat):
     color = C.category_color(cat)
@@ -21,9 +59,12 @@ def build_category_popover(ui, cat):
         on_submit=lambda e: ui.rename_category(cat["id"], e.control.value))
 
     header = ft.Row([
-        ft.Container(Wg.cat_glyph(cat, size=18), width=34, height=34, border_radius=10,
+        ft.Container(Wg.cat_glyph(cat, size=18, fill=34 if cat.get("image") else None),
+                     width=34, height=34,
+                     border_radius=17 if cat.get("image") else 10,
                      bgcolor=C.PANEL_3, border=ft.border.all(1, C.LINE_4),
-                     alignment=ft.alignment.center),
+                     alignment=ft.alignment.center,
+                     clip_behavior=ft.ClipBehavior.ANTI_ALIAS),
         ft.Container(name_field, height=30, bgcolor=C.BG_1,
                      border=ft.border.all(1, C.SLOT_BORDER), border_radius=7,
                      padding=ft.padding.symmetric(0, 9), expand=True),
@@ -80,21 +121,7 @@ def build_category_popover(ui, cat):
         alignment=ft.alignment.center, tooltip=name,
         on_click=lambda e, n=name: ui.set_category_icon(cat["id"], n)) for name in ICON_PACK]
 
-    image_row = ft.Container(
-        ft.Row([ft.Icon(ft.Icons.IMAGE, size=17, color=C.MUTED),
-                ft.Column([T("Своя картинка", size=12.5, color=C.TEXT_2),
-                           T("PNG или SVG", size=10.5, color=C.TEXT_DIM)],
-                          spacing=1, expand=True, tight=True),
-                ft.Container(T("Убрать" if cat.get("image") else "Выбрать", size=11.5,
-                               color=C.TEXT),
-                             border=ft.border.all(1, C.LINE_4), border_radius=7,
-                             padding=ft.padding.symmetric(5, 10),
-                             on_click=lambda e: (ui.clear_category_image(cat["id"])
-                                                 if cat.get("image")
-                                                 else ui.pick_category_image(cat["id"])))],
-               spacing=9, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        height=44, border=ft.border.all(1, C.LINE_4), border_radius=10,
-        padding=ft.padding.symmetric(0, 12), margin=ft.margin.only(top=10))
+    image_row = _image_row(ui, cat)
 
     footer = ft.Container(
         ft.Row([ft.Container(

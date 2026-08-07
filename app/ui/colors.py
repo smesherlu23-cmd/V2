@@ -118,6 +118,20 @@ HEADER_H = 52
 RAIL_W = 72
 RAIL_BTN = 42
 SIDEBAR_W = 232
+
+# The category rail scales as one unit: widening the strip without growing
+# the buttons inside it just adds padding, so every measurement that has to
+# stay in proportion lives in one row here.
+RAIL_SIZES = {
+    "normal": {"rail": 72, "btn": 42, "glyph": 19, "gap": 8},
+    "large": {"rail": 92, "btn": 58, "glyph": 26, "gap": 10},
+    "huge": {"rail": 116, "btn": 76, "glyph": 34, "gap": 12},
+}
+DEFAULT_RAIL_SIZE = "normal"
+
+
+def rail_metrics(size) -> dict:
+    return RAIL_SIZES.get(size) or RAIL_SIZES[DEFAULT_RAIL_SIZE]
 INSPECTOR_W = 300
 SEARCH_W = 560
 SEARCH_MIN_W = 220
@@ -139,7 +153,7 @@ LIBRARY_MIN_W = 940
 LIBRARY_MIN_H = 620
 MENU_W = 300
 POPOVER_W = 330
-POPOVER_H = 486
+POPOVER_H = 520
 TOAST_MIN_W = 360
 TOAST_MAX_W = 520
 SET_SIDE_W = 300
