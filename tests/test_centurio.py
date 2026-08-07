@@ -1354,8 +1354,32 @@ def test_discovery():
             s = s.replace(k, v)
         ok(s.count("{") == s.count("}"), f"{name}: braces balanced")
         ok(s.count('@"') == s.count('"@'), f"{name}: here-strings balanced")
+        ok(s.count("'") % 2 == 0, f"{name}: single quotes balanced")
         remaining = [k for k in ("__DIRS__", "__CACHE__", "__EXE__") if k in s]
         ok(not remaining, f"{name}: all placeholders substituted")
+
+    for fn in ("Best-Exe", "Get-StartApps", "Save-StoreIcon", "Resolve-StoreAsset", "Add-Store"):
+        ok(fn in discovery._WIN_PS, f"_WIN_PS defines/calls {fn}")
+
+    # 32-bit builds get silently handed the 32-bit PowerShell, whose HKLM
+    # queries are then themselves registry-redirected — a native 64-bit-only
+    # install (a machine-wide VS Code, say) never shows up even though every
+    # path in the script looks like it should be the 64-bit view.
+    real_maxsize, real_name, real_isfile = sys.maxsize, os.name, os.path.isfile
+    try:
+        os.name = "nt"
+        sys.maxsize = 2**31 - 1
+        os.path.isfile = lambda p: False
+        ok(discovery._powershell_exe() == "powershell",
+           "32-bit process, no Sysnative escape hatch -> falls back rather than failing")
+        os.path.isfile = lambda p: "sysnative" in p.lower()
+        ok("sysnative" in discovery._powershell_exe().lower(),
+           "32-bit process with Sysnative available -> reaches the real 64-bit PowerShell")
+        sys.maxsize = 2**63 - 1
+        ok(discovery._powershell_exe() == "powershell",
+           "a 64-bit process already sees the real registry, no Sysnative detour needed")
+    finally:
+        sys.maxsize, os.name, os.path.isfile = real_maxsize, real_name, real_isfile
 
     store2 = Store(os.path.join(tempfile.mkdtemp(), "d.json"))
     a = store2.add_app({"name": "CS2", "path": "steam://rungameid/730", "icon": "/fake/cover.jpg"})
