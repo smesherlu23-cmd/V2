@@ -46,6 +46,7 @@ from .windows import (  # noqa: F401
     _looks_like_junk,
     _powershell_exe,
     _win_extract_store_one,
+    raw_windows_entries,
     store_parts,
 )
 

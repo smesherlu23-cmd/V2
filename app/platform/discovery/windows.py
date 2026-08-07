@@ -333,36 +333,51 @@ def _ps_literal(value: str | None) -> str:
         return "$null"
     return "'" + value.replace("'", "''") + "'"
 
-def _discover_windows(icon_cache: str | None) -> list[dict]:
+def _windows_menu_dirs() -> list[str]:
     prog_data = os.environ.get("ProgramData", r"C:\ProgramData")
     appdata = os.environ.get("APPDATA", "")
     dirs = [os.path.join(prog_data, r"Microsoft\Windows\Start Menu\Programs")]
     if appdata:
         dirs.append(os.path.join(appdata, r"Microsoft\Windows\Start Menu\Programs"))
-    dirs = [d for d in dirs if os.path.isdir(d)]
-    dir_list = ",".join(_ps_literal(d) for d in dirs)
+    return [d for d in dirs if os.path.isdir(d)]
 
+
+def raw_windows_entries(icon_cache: str | None) -> tuple[list[dict], str, int]:
+    """Everything the PowerShell pass returned, before any of our own
+    filtering — plus its stderr and exit code.
+
+    _discover_windows below only ever surfaces the *filtered* list, which
+    can't tell "PowerShell never found this program" apart from "we found
+    it and our own junk filter dropped it" — two completely different bugs
+    that need completely different fixes. app.diagnose calls this directly
+    to show both counts side by side instead of guessing from one number.
+    """
+    dir_list = ",".join(_ps_literal(d) for d in _windows_menu_dirs())
     ps = _WIN_PS.replace("__DIRS__", dir_list).replace("__CACHE__", _ps_literal(icon_cache))
     res = _run_powershell(ps, timeout=90)
+    stderr = (res.stderr or "").strip()
     out = (res.stdout or "").strip()
     if not out:
+        return [], stderr, res.returncode
+    try:
+        data = json.loads(out)
+    except json.JSONDecodeError:
+        return [], out, res.returncode
+    return (data if isinstance(data, list) else [data]), stderr, res.returncode
+
+
+def _discover_windows(icon_cache: str | None) -> list[dict]:
+    data, stderr, code = raw_windows_entries(icon_cache)
+    if not data:
         # A parse-time error in the script (as opposed to a runtime one
         # inside a try/catch) aborts before a single Add-App/Add-Store call
         # runs, so this is "found nothing at all", not "found nothing new" —
         # worth a line in the log, since it otherwise looks identical to an
         # empty Start Menu.
-        if res.returncode != 0 or res.stderr:
+        if code != 0 or stderr:
             log.warning("обнаружение программ Windows: пустой вывод PowerShell "
-                       "(код %s): %s", res.returncode, (res.stderr or "").strip()[:2000])
+                       "(код %s): %s", code, stderr[:2000])
         return []
-    try:
-        data = json.loads(out)
-    except json.JSONDecodeError:
-        log.warning("обнаружение программ Windows: вывод PowerShell не в формате JSON: %s",
-                   out[:2000])
-        return []
-    if isinstance(data, dict):
-        data = [data]
 
     apps = []
     for x in data:
