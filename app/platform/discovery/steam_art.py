@@ -1,7 +1,3 @@
-"""Locates a Steam game's icon and library artwork on disk, falling
-back to Steam's CDN (with a circuit breaker) when the local cache
-doesn't have it yet."""
-
 from __future__ import annotations
 
 import glob

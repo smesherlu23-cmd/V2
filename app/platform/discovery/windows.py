@@ -1,7 +1,3 @@
-"""Discovers programs from the Start Menu and the registry's
-Uninstall/App Paths keys, via a PowerShell script that also
-extracts each one's icon."""
-
 from __future__ import annotations
 
 import json
@@ -22,20 +18,13 @@ _WIN_NAME_JUNK = ("node.js", "command prompt", "командная строка"
                   "redistributable", "runtime", "hotfix", "update for", "sdk ",
                   "web platform", "webview")
 
-# Matched as whole words, so "Rockstar Games SDK" is caught where the "sdk "
-# substring above only catches an SDK followed by something else.
 _JUNK_NAME_WORDS = frozenset((
     "sdk", "runtime", "redistributable", "redist", "hotfix", "framework",
     "verifier", "debugger", "webview", "webview2", "driver", "drivers",
     "prerequisites", "bootstrapper",
 ))
 
-# Folders that only ever hold installer payloads, shared plumbing or OS
-# components. Every one of these produced a visible false positive: WiX keeps
-# installer bundles in Package Cache forever (so a program's *installer*
-# offered itself alongside the program), Common Files holds things like
-# TabTip, and Windows Mail's wab/wabmig sit outside \Windows\ despite being
-# as internal as anything in it.
+
 _JUNK_DIRS = (
     "\\package cache\\",
     "\\common files\\",
@@ -47,10 +36,7 @@ _JUNK_DIRS = (
     "\\$recycle.bin\\",
 )
 
-# The Office suite drops dozens of internal tools next to the real programs
-# in the same Office16 folder — SKYPESERVER, MSOXMLED, MSOSYNC and friends.
-# Naming the handful of actual applications is shorter and safer than trying
-# to enumerate the rest.
+
 _OFFICE_APPS = frozenset((
     "winword.exe", "excel.exe", "powerpnt.exe", "outlook.exe", "msaccess.exe",
     "onenote.exe", "mspub.exe", "visio.exe", "winproj.exe", "lync.exe",
@@ -76,13 +62,6 @@ def _looks_like_junk(name: str) -> bool:
 
 
 def _is_junk_target(path: str) -> bool:
-    """Whether the executable itself gives the entry away as not-a-program.
-
-    Filtering on the registry's DisplayName alone let plenty through: Steam's
-    entry is named "Steam" but points at uninstall.exe, and an installer
-    bundle cached under Package Cache carries the real product's name. The
-    path is the honest signal.
-    """
     p = (path or "").lower().replace("/", "\\")
     if not p:
         return False
@@ -137,10 +116,7 @@ function Save-Icon($exe){
   if($bmp){ try{ $bmp.Save($f,[System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose(); return $f }catch{} }
   return $null
 }
-# A Store app has no .exe to pull an icon from — PrivateExtractIcons/
-# ExtractAssociatedIcon above need a real PE file. Its own package carries a
-# ready-made PNG in AppxManifest.xml instead, so this reads the manifest and
-# copies that logo into the cache rather than "extracting" anything.
+
 function Resolve-StoreAsset($dir,$rel){
   $full=Join-Path $dir $rel
   if(Test-Path -LiteralPath $full){ return $full }
@@ -150,21 +126,13 @@ function Resolve-StoreAsset($dir,$rel){
   $ext=[System.IO.Path]::GetExtension($rel)
   $found=@(Get-ChildItem -LiteralPath $folder -Filter "$stem*$ext" -File 2>$null)
   if($found.Count -eq 0){ return $null }
-  # Scaled/qualified variants sit alongside the bare name the manifest gives
-  # (AppIcon.scale-200.png, ...targetsize-256_altform-unplated.png); prefer
-  # an unplated one (no colored backplate baked in — our own icon slot
-  # already draws its own background) and the largest file otherwise.
+
   $unplated=@($found | Where-Object { $_.Name -match 'unplated' })
   $pool=if($unplated.Count -gt 0){ $unplated } else { $found }
   $best=$pool | Sort-Object Length -Descending | Select-Object -First 1
   return $best.FullName
 }
-# XML-namespace-aware parsing of AppxManifest.xml kept missing perfectly
-# ordinary manifests: packaging tools disagree on which prefix (uap, uap5,
-# uap10...) carries VisualElements from one schema version to the next, and
-# [xml] casting itself can choke on encoding quirks some manifests have.
-# Regex on the raw text only cares about the attribute *names*, which stay
-# stable, so it works regardless of which prefix a given package used.
+
 function Get-LogoAttr($text,$attr){
   $m=[regex]::Match($text,"$attr\s*=\s*`"([^`"]+)`"")
   if($m.Success){ return $m.Groups[1].Value }
@@ -218,10 +186,6 @@ function Add-Store($n,$id){
   [void]$out.Add([PSCustomObject]@{name="$n";path="shell:AppsFolder\$id";icon=$ic;src='store'})
 }
 
-# An Uninstall entry without a usable DisplayIcon still knows where it was
-# installed, so fall back to the most plausible executable in that folder
-# instead of dropping the program entirely — plenty of installers point
-# DisplayIcon at an .ico, or set no icon at all.
 $rootish=@('','\','c:\','c:\program files','c:\program files (x86)','c:\windows','c:\users')
 function Best-Exe($dir,$name){
   if(-not $dir){ return $null }
@@ -267,9 +231,7 @@ foreach($k in $aps){
     if($p -and $p.ToLower().EndsWith('.exe') -and (Test-Path -LiteralPath $p)){ Add-App ([System.IO.Path]::GetFileNameWithoutExtension($p)) $p 'registry' }
   }
 }
-# Store apps live nowhere on disk that the passes above can see. Get-StartApps
-# lists what the Start menu shows; a UWP entry is the one whose AppID carries
-# the package-family "!" separator, and it launches through the shell.
+
 $sysapp=@('microsoft.windows.','microsoftwindows.','windows.immersivecontrolpanel',
           'microsoft.aad','microsoft.account','microsoft.creddialoghost','microsoft.ecapp',
           'microsoft.lockapp','microsoft.bioenrollment','microsoft.asynctextservice',
@@ -301,21 +263,6 @@ if($r){ Write-Output $r }
 _STORE_PATH_RE = re.compile(r"^shell:appsfolder\\([^!]+)(?:!(.*))?$", re.IGNORECASE)
 
 def _powershell_exe() -> str:
-    """Path to the *native* PowerShell, even when this process is 32-bit.
-
-    A 32-bit build launching plain "powershell" gets silently handed the
-    32-bit copy from SysWOW64 by Windows' file-system redirector — and that
-    32-bit powershell.exe is then itself subject to *registry* redirection,
-    so every HKLM query below, even the un-prefixed "SOFTWARE\\..." one that
-    is supposed to be the 64-bit view, comes back mapped into WOW6432Node.
-    A native 64-bit install that only ever wrote to the true
-    HKLM\\SOFTWARE\\...\\Uninstall — a system-wide VS Code, among others —
-    is invisible to it despite every registry path in the script looking
-    correct. %windir%\\Sysnative is the redirector's own escape hatch: the
-    path exists only from a 32-bit process and always resolves to the real
-    (64-bit) System32, sidestepping the problem instead of trying to work
-    around registry redirection from inside the script.
-    """
     if sys.maxsize > 2**32 or os.name != "nt":
         return "powershell"
     sysnative = os.path.join(os.environ.get("windir", r"C:\Windows"),
@@ -343,15 +290,6 @@ def _windows_menu_dirs() -> list[str]:
 
 
 def raw_windows_entries(icon_cache: str | None) -> tuple[list[dict], str, int]:
-    """Everything the PowerShell pass returned, before any of our own
-    filtering — plus its stderr and exit code.
-
-    _discover_windows below only ever surfaces the *filtered* list, which
-    can't tell "PowerShell never found this program" apart from "we found
-    it and our own junk filter dropped it" — two completely different bugs
-    that need completely different fixes. app.diagnose calls this directly
-    to show both counts side by side instead of guessing from one number.
-    """
     dir_list = ",".join(_ps_literal(d) for d in _windows_menu_dirs())
     ps = _WIN_PS.replace("__DIRS__", dir_list).replace("__CACHE__", _ps_literal(icon_cache))
     res = _run_powershell(ps, timeout=90)
@@ -369,11 +307,6 @@ def raw_windows_entries(icon_cache: str | None) -> tuple[list[dict], str, int]:
 def _discover_windows(icon_cache: str | None) -> list[dict]:
     data, stderr, code = raw_windows_entries(icon_cache)
     if not data:
-        # A parse-time error in the script (as opposed to a runtime one
-        # inside a try/catch) aborts before a single Add-App/Add-Store call
-        # runs, so this is "found nothing at all", not "found nothing new" —
-        # worth a line in the log, since it otherwise looks identical to an
-        # empty Start Menu.
         if code != 0 or stderr:
             log.warning("обнаружение программ Windows: пустой вывод PowerShell "
                        "(код %s): %s", code, stderr[:2000])
@@ -404,7 +337,6 @@ def _win_extract_one(path: str, icon_cache: str) -> str | None:
 
 
 def store_parts(path: str) -> tuple[str, str] | None:
-    """(family, appId) out of a "shell:AppsFolder\\<family>!<appId>" path."""
     m = _STORE_PATH_RE.match((path or "").strip())
     if not m:
         return None
@@ -412,13 +344,6 @@ def store_parts(path: str) -> tuple[str, str] | None:
 
 
 def _win_extract_store_one(path: str, icon_cache: str) -> str | None:
-    """Retry a Store app's icon after the fact.
-
-    Initial discovery already tries this for every Store entry it finds
-    (Save-StoreIcon in _WIN_PS); this is what a later rescan/backfill calls
-    for one whose first attempt came back empty — Get-AppxPackage can fail
-    transiently, or the app may not have been fully registered yet.
-    """
     parts = store_parts(path)
     if parts is None:
         return None

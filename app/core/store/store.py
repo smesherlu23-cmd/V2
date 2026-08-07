@@ -1,8 +1,3 @@
-"""The on-disk data store: apps, categories, sets, the inbox queue
-and settings, behind one lock, with atomic writes, debounced
-persistence for high-frequency updates, and recovery paths for a
-corrupt or newer-schema file."""
-
 from __future__ import annotations
 
 import copy
@@ -273,15 +268,6 @@ class Store:
             return self._remove_apps_locked(set(app_ids))["apps"]
 
     def remove_apps_with_sets(self, app_ids) -> dict:
-        """Like remove_apps, but also hands back the sets it touched.
-
-        A removed app is dropped from every set that held it, and a set left
-        with no members is deleted outright. remove_apps alone throws that
-        membership away, so a caller that undoes the removal (restore_apps)
-        gets the app back but not its place in any set. Callers that need
-        the undo to be complete should use this together with
-        restore_apps_and_sets.
-        """
         with self._lock:
             return self._remove_apps_locked(set(app_ids))
 

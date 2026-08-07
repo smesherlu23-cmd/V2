@@ -1,7 +1,3 @@
-"""Registers or removes Centurio from Windows' per-user Run key
-(and cleans up the older startup-folder shortcut some installs
-still have)."""
-
 from __future__ import annotations
 
 import os

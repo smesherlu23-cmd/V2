@@ -1,6 +1,3 @@
-"""The system-tray icon: its menu, and the callbacks that show the
-window, open the library or quit."""
-
 from __future__ import annotations
 
 import threading

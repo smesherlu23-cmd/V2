@@ -31,9 +31,7 @@ from .toast import Notifier, ToastHost
 
 WINDOW_TTL = 2.0
 TILE_CACHE_MAX = 600
-# Everything images.icon_image can actually draw. The picker used to offer
-# only PNG and SVG, so a plain .jpg — the format most icons come in — could
-# not even be selected in the file dialog.
+
 CATEGORY_IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg")
 
 class CenturioUI:
@@ -82,13 +80,6 @@ class CenturioUI:
             text_size=13.5, color=C.WHITE,
             hint_style=ft.TextStyle(color=C.MUTED_2, size=13.5),
             cursor_color=C.ACCENT, on_change=self._on_search,
-            # A click is a deliberate "I want to search" — on_focus fired for
-            # any reason the field regained focus, including the window
-            # simply coming back to the front after being hidden to the tray
-            # or toggled by the launch hotkey, which reopened the palette on
-            # top of the plain library the user actually asked to see.
-            # always_call_on_tap: fire every click, not only the one that
-            # first gives the field focus.
             on_click=lambda e: self._open_palette(), always_call_on_tap=True, expand=True,
         )
         self.search_icon = ft.Icon(ft.Icons.SEARCH, size=15, color=C.MUTED_2)
@@ -170,7 +161,6 @@ class CenturioUI:
         return self._settings.get("accent", C.ACCENT)
 
     def rail(self) -> dict:
-        """Pixel sizes for the category rail at the user's chosen scale."""
         return C.rail_metrics(self._settings.get("rail_size", C.DEFAULT_RAIL_SIZE))
 
     def _window_width(self) -> float:
@@ -594,15 +584,6 @@ class CenturioUI:
         self.view.capture = False
 
     def _sync_capture(self):
-        """Resume the global hotkey listener once capture mode ends.
-
-        ViewState clears `capture` from several places (closing the
-        inspector, switching filters, entering select mode, revalidating
-        stale ids) without going through `_stop_capture`. Routing the resume
-        through here — called at the end of every refresh — means the
-        listener never stays suspended just because capture ended some way
-        other than pressing Escape in the capture field.
-        """
         if self._capture_active and not self.view.capture:
             self._capture_active = False
             cb = self.controllers.get("resume_hotkeys")
@@ -701,8 +682,6 @@ class CenturioUI:
     def _toggle_quick(self, app_id, value):
         self.store.update_app(app_id, {"quick": bool(value)})
         self.on_library_changed()
-        # on_library_changed refreshed, so _accels already holds the freshly
-        # resolved slots — no need to work them out a second time.
         accel = self._accels.get(app_id)
         self.toast.show(f"Закреплено · {accel}" if value and accel
                         else "Закреплено" if value else "Откреплено",
@@ -725,14 +704,6 @@ class CenturioUI:
         self.on_library_changed()
 
     def _hotkey_clash(self, accel, skip_app_id=None, check_launch=True):
-        """Who already holds `accel`, phrased for the "уже занята — …" toast, or None if free.
-
-        Checks the launch hotkey, every app's own combination and every
-        set's slot (explicit or auto-assigned Ctrl+Alt+N) — the three
-        places a combination can be taken. Compares normalised forms, so
-        Ctrl+Escape and Ctrl+Esc count as the same key rather than as two
-        free ones that then collide inside the listener.
-        """
         want = normalize_accel(accel)
         launch = self.setting("launch_hotkey") or DEFAULT_LAUNCH_HOTKEY
         if check_launch and want == normalize_accel(launch):
@@ -873,12 +844,6 @@ class CenturioUI:
         self.refresh()
 
     def _reorder_category(self, dragged_id, target_id):
-        """Drop one category tile onto another to move it there directly.
-
-        Same insert-before-target idea as chrome.drop_set_item for набор
-        items — pull the dragged id out, insert it just ahead of the one it
-        was dropped on, persist the whole order in one write.
-        """
         if dragged_id == target_id:
             return
         ids = [c["id"] for c in self.categories()]
@@ -945,9 +910,7 @@ class CenturioUI:
             log.exception("не удалось скопировать изображение категории")
             self.toast.error("Не удалось прочитать файл")
             return None
-        # A category keeps one picture, but the filename carries the format,
-        # so swapping a PNG for a JPG would otherwise leave the old file
-        # behind and nothing would ever point at it again.
+        
         for stale in dest_dir.glob(f"{cat_id}.*"):
             if stale != dest:
                 try:
@@ -1008,14 +971,6 @@ class CenturioUI:
         self.refresh()
 
     def notify_hotkey_rejects(self, rejected):
-        """Surface combos the OS-level listener refused to bind.
-
-        HotkeyManager.register() quietly drops accelerators it can't parse
-        or that collide once translated to pynput's own syntax — a gap our
-        own clash checks in _hotkey_clash don't always catch (two different
-        accel strings can normalize to the same combo). Without this call
-        those bindings just don't work and nothing says why.
-        """
         accels = [a for a in dict.fromkeys(rejected) if a]
         if not accels:
             return
@@ -1100,12 +1055,6 @@ class CenturioUI:
             return
         index = [c["id"] for c in self.categories()].index(cat_id)
         metrics = self.rail()
-        # Two fixed rail buttons (all-apps, sidebar toggle) and a divider sit
-        # above the categories, so the popover tracks the button it belongs
-        # to. The categories themselves scroll independently of that fixed
-        # header, so their on-screen position also shifts by however far
-        # the rail has been scrolled (_rail_scroll, updated by the rail's
-        # own on_scroll — see Chrome._on_rail_scroll).
         top = (C.HEADER_H + 14 + (2 + index) * (metrics["btn"] + metrics["gap"]) + 9
                - self._rail_scroll)
         height = self._window_height()

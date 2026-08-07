@@ -1,7 +1,3 @@
-"""Pure functions over the store's data — sorting, section building,
-search-palette ranking, category suggestions — kept free of Flet
-and the store so they're trivial to test."""
-
 from __future__ import annotations
 
 from .text import plu_programs, plu_windows, short_ago
@@ -73,12 +69,6 @@ def quick_apps(apps: list[dict]) -> list[dict]:
 
 
 def hotkey_apps(apps: list[dict], accels: dict) -> list[dict]:
-    """Everything in the strip: pinned apps and anything with its own combo.
-
-    Keyed off the resolved accelerator map rather than the `quick` flag, so
-    an app given a custom hotkey shows up next to the pinned ones instead
-    of being reachable by a key that appears nowhere in the interface.
-    """
     return [a for a in apps if a["id"] in accels]
 
 

@@ -70,9 +70,7 @@ class Chrome:
                    on_drop_app=None, on_drop_category=None, on_context=None,
                    badge=None, outlined=False):
         btn = self.ui.rail()["btn"]
-        # Discord's squircle-on-select: a circle at rest, rounded square when
-        # active. Both radii track the button so the shape reads the same at
-        # every rail scale.
+
         round_r, square_r = btn / 2, btn / 3
         inner = ft.Container(
             glyph, width=btn, height=btn,
@@ -112,9 +110,7 @@ class Chrome:
                 payload = getattr(src, "data", None) if src is not None else None
                 inner.border = ft.border.all(1, C.LINE_4) if outlined else None
                 Wg.safe_update(inner)
-                # A dragged category tile and a dragged app tile share the
-                # "apps" DragTarget group (Flet targets can only listen to
-                # one group at a time) — the dict shape tells them apart.
+
                 if isinstance(payload, dict) and payload.get("category_id"):
                     if on_drop_category:
                         on_drop_category(payload["category_id"])
@@ -151,15 +147,6 @@ class Chrome:
         self.ui._rail_scroll = e.pixels or 0.0
 
     def build_rail(self):
-        """The category rail: fixed top and bottom, a scrolling middle.
-
-        At the "huge" scale, or with enough categories, the full list no
-        longer fits between the window's top and bottom — with the old
-        single non-scrolling Column that meant the add-category button and
-        everything below it (Разбор, Настройки) became simply unreachable.
-        Only the categories scroll now; the two always-there buttons above
-        the divider and the two below stay put, the way a real sidebar does.
-        """
         self.ui._rail_scroll = 0.0
         on_grid = self.ui.view.screen == "grid" and not self.ui.view.active_set
         all_active = self.ui.is_all_view() and on_grid
@@ -191,11 +178,6 @@ class Chrome:
                 on_drop_category=lambda dragged, cid=cat["id"]: self.ui._reorder_category(
                     dragged, cid),
                 on_context=lambda e, c=cat: self.ui.context_menus.category_menu(c, e))
-            # Draggable so the tile can be dragged onto another category to
-            # reorder — a raw drag of the badge itself, not just the
-            # existing up/down menu entries. Same "apps" group as app tiles
-            # (see _rail_item._accept): the {"category_id": ...} shape is
-            # what tells the two kinds of drop apart.
             cats.append(ft.Draggable(group="apps", content=item,
                                      data={"category_id": cat["id"]}))
         add = ft.Container(ft.Icon(ft.Icons.ADD, size=glyph - 3, color=C.TEXT_FAINT),

@@ -1,5 +1,3 @@
-"""Reads Epic Games Launcher manifests to list installed games."""
-
 from __future__ import annotations
 
 import glob

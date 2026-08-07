@@ -1,8 +1,3 @@
-"""Resolves and extracts an icon for a given app path (Windows .exe
-or Steam appid), plus the backfill pass that fills in icons/art
-for apps added before this schema existed, and cache pruning for
-files nothing references anymore."""
-
 from __future__ import annotations
 
 import os

@@ -11,12 +11,6 @@ AVATAR = 52
 
 
 def _image_row(ui, cat):
-    """The Discord-style avatar block: click the circle to upload.
-
-    The circle is the control, not a label next to one — that's what makes
-    it read as "put a picture here" rather than as a preview of a setting
-    that lives somewhere else.
-    """
     has_image = bool(cat.get("image"))
     art = Wg.cat_image(cat, AVATAR, fill=AVATAR) if has_image else None
     if art is None:

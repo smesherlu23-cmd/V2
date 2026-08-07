@@ -1,7 +1,3 @@
-"""Starts programs (plain, elevated, or via steam://) and tracks
-which of them are currently running by polling process names
-against each app's tracked executable."""
-
 from __future__ import annotations
 
 import ntpath
@@ -160,9 +156,6 @@ class Launcher:
         if not path:
             return {"ok": False, "error": "Не указан путь к приложению"}
 
-        # A Store app is addressed by its package id, not by a file — the
-        # shell resolves "shell:AppsFolder\<PackageFamily>!<App>" itself, and
-        # there is nothing on disk for the os.path.exists check below to find.
         if re.match(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://", path) or path.lower().startswith("shell:"):
             try:
                 self._open_with_os(path)

@@ -1,8 +1,3 @@
-"""Accelerator parsing and the global-hotkey listener (pynput).
-
-Also assigns the automatic Ctrl+1..9 / Ctrl+Alt+1..9 quick-launch
-slots and checks accelerators against Windows' own reserved combos."""
-
 from __future__ import annotations
 
 from ..infra import log
@@ -14,11 +9,6 @@ _MODS = {
     "win": "<cmd>", "cmd": "<cmd>", "super": "<cmd>", "meta": "<cmd>",
 }
 
-# Flet's KeyboardEvent.key spells several keys differently from pynput —
-# "Arrow Up" vs "up", "Escape" vs "esc", "Page Up" vs "page_up". Feeding
-# Flet's spelling straight through produced combos like "<arrow up>" that
-# pynput's parser refuses, so the binding was dropped at register() time
-# while the UI happily showed it as assigned.
 _KEY_ALIASES = {
     "arrow up": "up", "arrow down": "down",
     "arrow left": "left", "arrow right": "right",
@@ -30,9 +20,6 @@ _KEY_ALIASES = {
     "break": "pause",
 }
 
-# Every pynput Key member worth binding. Anything outside this set (and not
-# a single character) cannot become a hotkey, so capture refuses it up
-# front instead of letting it silently fail later.
 _PYNPUT_KEYS = {
     "backspace", "caps_lock", "delete", "down", "end", "enter", "esc", "home",
     "insert", "left", "menu", "num_lock", "page_down", "page_up", "pause",
@@ -41,8 +28,6 @@ _PYNPUT_KEYS = {
     "media_volume_up", "media_volume_down", "media_volume_mute",
 } | {f"f{n}" for n in range(1, 21)}
 
-# Keys that may be a hotkey all by themselves, because nobody types with
-# them. Everything else needs a modifier — see is_bindable.
 _STANDALONE_KEYS = {
     "pause", "print_screen", "scroll_lock",
     "media_next", "media_previous", "media_play_pause",
@@ -51,7 +36,6 @@ _STANDALONE_KEYS = {
 
 
 def canonical_key(token: str) -> str:
-    """One spelling for a key, whoever named it (Flet, a data file, a user)."""
     key = str(token or "").strip().lower()
     return _KEY_ALIASES.get(key, key)
 
@@ -75,7 +59,6 @@ _MOD_ALIASES = {"control": "ctrl", "option": "alt", "cmd": "win", "super": "win"
 
 
 def split_accel(accel: str) -> tuple[set[str], str]:
-    """An accelerator as (modifier names, canonical key)."""
     tokens = [t.strip().lower() for t in str(accel or "").split("+") if t.strip()]
     if not tokens:
         return set(), ""
@@ -91,21 +74,12 @@ def normalize_accel(accel: str) -> str:
 
 
 def is_bindable(accel: str) -> tuple[bool, str]:
-    """Whether `accel` can actually become a global hotkey, and why not.
-
-    Checked at capture time so a combination that the listener would drop
-    is refused while the user is still looking at the field, rather than
-    being stored, displayed as active and never firing.
-    """
     mods, key = split_accel(accel)
     if not key:
         return False, "Не разобрал комбинацию"
     if len(key) != 1 and key not in _PYNPUT_KEYS:
         return False, "Эту клавишу назначить нельзя"
     if not mods and key not in _STANDALONE_KEYS:
-        # The listener is global, so a bare typing key would be swallowed in
-        # every other program too — F-keys and media keys are the ones no
-        # one types with, so those alone may stand on their own.
         return False, "Нужен модификатор — Ctrl, Alt, Shift или Win"
     if is_reserved(accel):
         return False, "Комбинацию занимает Windows — система её не отдаст"
@@ -230,13 +204,6 @@ QUICK_SLOTS = 9
 
 
 def _auto_accels(records, pattern: str, wanted, reserved=()) -> dict[str, str]:
-    """Explicit hotkeys, then automatic numbered slots for the rest.
-
-    `reserved` carries combinations already spoken for elsewhere (an app's
-    own hotkey when handing out set slots, say). Without it the two
-    auto-assigners could both land on Ctrl+Alt+1, and whichever the
-    listener saw second was silently dropped.
-    """
     accels: dict[str, str] = {}
     used = {normalize_accel(a) for a in reserved if a}
     for rec in records:
@@ -271,9 +238,6 @@ def free_quick_slot(apps) -> int:
     taken = set()
     for accel in quick_accels(apps).values():
         mods, key = split_accel(accel)
-        # Only a plain Ctrl+N occupies a quick slot — Ctrl+Shift+5 used to
-        # be read as "slot 5 is taken" because this looked at the last
-        # segment alone.
         if mods == {"ctrl"} and key.isdigit():
             taken.add(key)
     return next((n for n in range(1, QUICK_SLOTS + 1) if str(n) not in taken), 0)
@@ -305,13 +269,6 @@ def set_for_accel(sets, accel: str, reserved=()) -> str | None:
 
 
 def resolve_accels(apps, sets, launch_hotkey: str) -> tuple[dict[str, str], dict[str, str]]:
-    """Every accelerator the app hands out, worked out in one pass.
-
-    Priority runs launch hotkey -> apps -> sets, each one seeing what the
-    previous took. Callers must use this rather than calling quick_accels
-    and set_accels separately, so the rail badges, the tile hints and the
-    listener can never disagree about which combination belongs to what.
-    """
     app_accels = quick_accels(apps, reserved=[launch_hotkey])
     set_slots = set_accels(sets, reserved=[launch_hotkey, *app_accels.values()])
     return app_accels, set_slots

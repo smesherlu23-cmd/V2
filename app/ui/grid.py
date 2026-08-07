@@ -15,12 +15,6 @@ QUICK_H = 88
 
 
 def quick_slot_label(accel: str) -> str:
-    """The corner badge on a quick card.
-
-    An automatic Ctrl+N slot shows just the digit — the header already says
-    Ctrl+1…9. A custom combination shows in full, because the bare last
-    key ("E" for Ctrl+Shift+E) tells the user nothing about what to press.
-    """
     mods, key = split_accel(accel)
     return key.upper() if mods == {"ctrl"} and key.isdigit() else format_accel(accel)
 
@@ -91,9 +85,6 @@ class GridView:
         for app in queries.hotkey_apps(queries.visible(self.ui.apps()), self.ui._accels):
             cards.append(self._quick_card(app, self.ui._accels.get(app["id"])))
         free = free_quick_slot(self.ui.apps())
-        # An empty strip has to offer the placeholder, otherwise the header
-        # sits above nothing at all and there is no way in from here — the
-        # row-fitting check only makes sense once something is in the row.
         if free and (not cards or self._fits_in_row(len(cards))):
             cards.append(self._quick_empty(free))
 

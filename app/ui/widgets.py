@@ -8,16 +8,6 @@ from .images import icon_image, is_launcher_art
 
 
 def safe_update(control) -> None:
-    """Update a control without crashing on a stale event.
-
-    Flet delivers hover/drag callbacks from a background thread pool, so a
-    handler can still fire after its control was rebuilt away — evicted
-    from the tile cache, the screen switched, a refresh replaced the tree —
-    and by the time it runs, the control's `page` link is already gone.
-    `control.update()` asserts on that instead of failing quietly, which
-    otherwise surfaces as noise in the console (or a real crash on some
-    Flet versions) for something the user never notices in the UI.
-    """
     try:
         if control.page:
             control.update()
@@ -148,16 +138,6 @@ def cat_glyph_name(cat) -> str:
 
 
 def cat_image(cat, size: int, fill: int | None = None):
-    """A category's own picture, cropped to a circle the way Discord does.
-
-    COVER inside a circular clip means a wide logo or a screenshot fills the
-    badge instead of being letterboxed inside it — CONTAIN left transparent
-    bars above and below anything that wasn't already square, which is what
-    made uploaded art read as a thumbnail rather than an icon.
-
-    `fill` lets the rail hand in the button size so the picture reaches the
-    edges there, while inline uses (section heads, menus) stay glyph-sized.
-    """
     path = (cat or {}).get("image")
     if not path:
         return None

@@ -254,8 +254,6 @@ def main(page: ft.Page):
             if hotkeys.handles(accel):
                 return
             state = store.state()
-            # Same resolution the listener used, so the in-window fallback
-            # fires the same target the global hotkey would have.
             app_accels, set_slots = resolve_accels(
                 state["apps"], _ordered_sets(state),
                 state["settings"].get("launch_hotkey") or DEFAULT_LAUNCH_HOTKEY)

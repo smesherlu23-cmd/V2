@@ -1,8 +1,3 @@
-"""ctypes wrappers around the Win32 window and monitor APIs —
-enumerating windows, activating/placing/closing them, and reading
-monitor work areas — everything set-layout and window-matching
-need on top of user32."""
-
 from __future__ import annotations
 
 import ntpath
@@ -208,14 +203,6 @@ def work_area(index: int = 0):
 
 
 def visible_on_monitors(rect, areas, margin: int = 40) -> bool:
-    """Whether enough of `rect` (x, y, w, h) lands on some monitor to grab it.
-
-    A saved window position from a monitor layout that no longer exists
-    (external display unplugged, resolution changed) can sit entirely off
-    every current screen. The title bar is hidden and frameless, so a
-    window like that has no title bar to drag back into view — the only
-    way out used to be editing centurio-data.json by hand.
-    """
     x, y, w, h = rect
     for mx, my, mw, mh in areas:
         overlap_w = min(x + w, mx + mw) - max(x, mx)
