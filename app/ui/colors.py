@@ -124,8 +124,8 @@ SIDEBAR_W = 232
 # stay in proportion lives in one row here.
 RAIL_SIZES = {
     "normal": {"rail": 72, "btn": 42, "glyph": 19, "gap": 8},
-    "large": {"rail": 92, "btn": 58, "glyph": 26, "gap": 10},
-    "huge": {"rail": 116, "btn": 76, "glyph": 34, "gap": 12},
+    "large": {"rail": 84, "btn": 52, "glyph": 23, "gap": 9},
+    "huge": {"rail": 100, "btn": 64, "glyph": 28, "gap": 10},
 }
 DEFAULT_RAIL_SIZE = "normal"
 

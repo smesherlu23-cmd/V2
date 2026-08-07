@@ -3,6 +3,7 @@ from __future__ import annotations
 import flet as ft
 
 from . import colors as C
+from . import widgets as Wg
 from .format import T, cat_icon
 
 ROW_H = 36
@@ -144,7 +145,7 @@ class MenuHost:
         if not row["disabled"]:
             def on_hover(e, c=container):
                 c.bgcolor = C.PANEL_3 if e.data == "true" else None
-                c.update()
+                Wg.safe_update(c)
             container.on_hover = on_hover
         return container
 

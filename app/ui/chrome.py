@@ -91,7 +91,7 @@ class Chrome:
             inner.border_radius = square_r if highlight else round_r
             if fixed_color is None and isinstance(inner.content, ft.Icon):
                 inner.content.color = C.TEXT if highlight else C.MUTED
-            inner.update()
+            Wg.safe_update(inner)
         inner.on_hover = on_hover
 
         button = inner
@@ -110,7 +110,7 @@ class Chrome:
                 src = self.ui.page.get_control(e.src_id)
                 payload = getattr(src, "data", None) if src is not None else None
                 inner.border = ft.border.all(1, C.LINE_4) if outlined else None
-                inner.update()
+                Wg.safe_update(inner)
                 if isinstance(payload, dict) and payload.get("ids"):
                     on_drop_app(payload["ids"])
                 elif payload:
@@ -118,11 +118,11 @@ class Chrome:
 
             def _will(e):
                 inner.border = ft.border.all(2, self.ui._accent())
-                inner.update()
+                Wg.safe_update(inner)
 
             def _leave(e):
                 inner.border = ft.border.all(1, C.LINE_4) if outlined else None
-                inner.update()
+                Wg.safe_update(inner)
             content = ft.DragTarget(group="apps", content=tapper,
                                     on_accept=_accept, on_will_accept=_will, on_leave=_leave)
 
@@ -139,13 +139,27 @@ class Chrome:
             height=17, border_radius=9, bgcolor=self.ui._accent(),
             padding=ft.padding.symmetric(0, 5), alignment=ft.alignment.center)
 
+    def _on_rail_scroll(self, e: ft.OnScrollEvent):
+        self.ui._rail_scroll = e.pixels or 0.0
+
     def build_rail(self):
+        """The category rail: fixed top and bottom, a scrolling middle.
+
+        At the "huge" scale, or with enough categories, the full list no
+        longer fits between the window's top and bottom — with the old
+        single non-scrolling Column that meant the add-category button and
+        everything below it (Разбор, Настройки) became simply unreachable.
+        Only the categories scroll now; the two always-there buttons above
+        the divider and the two below stay put, the way a real sidebar does.
+        """
+        self.ui._rail_scroll = 0.0
         on_grid = self.ui.view.screen == "grid" and not self.ui.view.active_set
         all_active = self.ui.is_all_view() and on_grid
         waiting = len(self.ui.inbox())
         metrics = self.ui.rail()
         btn, glyph, gap = metrics["btn"], metrics["glyph"], metrics["gap"]
-        items = [
+
+        top = [
             self._rail_item(ft.Icon(ft.Icons.GRID_VIEW, size=glyph,
                                     color=C.TEXT if all_active else C.MUTED),
                             all_active, lambda: self.ui._set_filter("all"), "Все программы"),
@@ -156,9 +170,11 @@ class Chrome:
             ft.Container(width=round(btn * 0.72), height=1, bgcolor=C.LINE_2,
                          margin=ft.margin.symmetric(3, 0)),
         ]
+
+        cats = []
         for cat in self.ui.categories():
             active = self.ui.view.filter == f"category:{cat['id']}" and on_grid
-            items.append(self._rail_item(
+            cats.append(self._rail_item(
                 Wg.cat_glyph(cat, size=glyph, color=C.TEXT if active else None,
                              fill=btn), active,
                 lambda cid=cat["id"]: self.ui._set_filter(f"category:{cid}"), cat["name"],
@@ -171,27 +187,35 @@ class Chrome:
                            border=ft.border.all(1.5, C.CONTROL),
                            on_click=lambda e: self.ui._add_category(),
                            tooltip="Добавить категорию")
-        items += [ft.Row([ft.Container(width=3),
-                          ft.Container(add, expand=True, alignment=ft.alignment.center)],
-                         spacing=0),
-                  ft.Container(expand=True)]
+        cats.append(ft.Row([ft.Container(width=3),
+                            ft.Container(add, expand=True, alignment=ft.alignment.center)],
+                           spacing=0))
+        middle = ft.Container(
+            ft.Column(cats, spacing=gap, horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                      scroll=ft.ScrollMode.AUTO, on_scroll=self._on_rail_scroll, expand=True),
+            expand=True)
+
         triage_active = self.ui.view.screen == "triage"
-        items.append(self._rail_item(
-            ft.Icon(ft.Icons.INBOX, size=glyph - 1, color=C.TEXT if triage_active else C.TEXT_2),
-            triage_active, lambda: self.ui.open_triage(),
-            f"Разбор · {waiting}" if waiting and not self.ui.calm() else "Разбор",
-            badge=self._inbox_badge(waiting) if waiting and not self.ui.calm() else None,
-            outlined=True))
-        settings = ft.Container(ft.Icon(ft.Icons.SETTINGS, size=glyph - 1,
-                                        color=C.TEXT if self.ui.view.screen == "settings"
-                                        else C.MUTED_2),
-                                width=btn, height=btn, border_radius=btn / 2,
-                                alignment=ft.alignment.center,
-                                on_click=lambda e: self.ui._open_settings(), tooltip="Настройки")
-        items += [ft.Container(height=4), settings]
+        bottom = [
+            self._rail_item(
+                ft.Icon(ft.Icons.INBOX, size=glyph - 1,
+                       color=C.TEXT if triage_active else C.TEXT_2),
+                triage_active, lambda: self.ui.open_triage(),
+                f"Разбор · {waiting}" if waiting and not self.ui.calm() else "Разбор",
+                badge=self._inbox_badge(waiting) if waiting and not self.ui.calm() else None,
+                outlined=True),
+            ft.Container(height=4),
+            ft.Container(ft.Icon(ft.Icons.SETTINGS, size=glyph - 1,
+                                 color=C.TEXT if self.ui.view.screen == "settings"
+                                 else C.MUTED_2),
+                        width=btn, height=btn, border_radius=btn / 2,
+                        alignment=ft.alignment.center,
+                        on_click=lambda e: self.ui._open_settings(), tooltip="Настройки"),
+        ]
+
         return ft.Container(
-            ft.Column(items, spacing=gap, horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                      expand=True),
+            ft.Column(top + [middle] + bottom, spacing=gap,
+                      horizontal_alignment=ft.CrossAxisAlignment.CENTER, expand=True),
             padding=ft.padding.only(0, 14, 0, 12),
             border=ft.border.only(right=ft.BorderSide(1, C.LINE_2)), expand=True,
         )

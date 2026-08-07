@@ -291,7 +291,7 @@ class GridView:
             hot = e.data == "true"
             tile.border = ft.border.all(1, C.LINE_4 if hot else C.LINE)
             tile.bgcolor = C.SELECTED_BG if hot else C.PANEL
-            tile.update()
+            Wg.safe_update(tile)
         tile.on_hover = on_hover
         return self._tile_gestures(tile, a, ids)
 
@@ -318,7 +318,7 @@ class GridView:
             if selected:
                 return
             tile.border = ft.border.all(1, C.LINE_4 if e.data == "true" else C.LINE)
-            tile.update()
+            Wg.safe_update(tile)
         tile.on_hover = on_hover
         return self._tile_gestures(tile, a, ids)
 
