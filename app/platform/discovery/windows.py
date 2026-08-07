@@ -9,6 +9,7 @@ import ntpath
 import os
 import re
 import subprocess
+import sys
 
 from ...infra import log
 
@@ -136,13 +137,73 @@ function Save-Icon($exe){
   if($bmp){ try{ $bmp.Save($f,[System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose(); return $f }catch{} }
   return $null
 }
+# A Store app has no .exe to pull an icon from — PrivateExtractIcons/
+# ExtractAssociatedIcon above need a real PE file. Its own package carries a
+# ready-made PNG in AppxManifest.xml instead, so this reads the manifest and
+# copies that logo into the cache rather than "extracting" anything.
+function Resolve-StoreAsset($dir,$rel){
+  $full=Join-Path $dir $rel
+  if(Test-Path -LiteralPath $full){ return $full }
+  $folder=Split-Path $full -Parent
+  if(-not (Test-Path -LiteralPath $folder)){ return $null }
+  $stem=[System.IO.Path]::GetFileNameWithoutExtension($rel)
+  $ext=[System.IO.Path]::GetExtension($rel)
+  $found=@(Get-ChildItem -LiteralPath $folder -Filter "$stem*$ext" -File 2>$null)
+  if($found.Count -eq 0){ return $null }
+  # Scaled/qualified variants sit alongside the bare name Manifest names
+  # (AppIcon.scale-200.png, ...targetsize-256_altform-unplated.png); prefer
+  # an unplated (no colored backplate) one, then the largest file.
+  $best=$found | Sort-Object -Property @{Expression={$_.Name -notmatch 'unplated'}},
+                                       @{Expression='Length';Descending=$true} | Select-Object -First 1
+  return $best.FullName
+}
+function Save-StoreIcon($family,$appId){
+  if(-not $cache -or -not $family){ return $null }
+  $f=Join-Path $cache ((Md5 "store:$family!$appId")+'_store.png')
+  if(Test-Path -LiteralPath $f){ return $f }
+  try{
+    $pkg=Get-AppxPackage -PackageFamilyName $family -ErrorAction SilentlyContinue | Select-Object -First 1
+    if(-not $pkg -or -not $pkg.InstallLocation){ return $null }
+    $manifestPath=Join-Path $pkg.InstallLocation 'AppxManifest.xml'
+    if(-not (Test-Path -LiteralPath $manifestPath)){ return $null }
+    [xml]$manifest=Get-Content -LiteralPath $manifestPath -Raw
+    $ns=New-Object System.Xml.XmlNamespaceManager($manifest.NameTable)
+    $ns.AddNamespace('a',$manifest.DocumentElement.NamespaceURI)
+    $ns.AddNamespace('uap','http://schemas.microsoft.com/appx/manifest/uap/windows10')
+    $logoRel=$null
+    $app=$manifest.SelectSingleNode("//a:Applications/a:Application[@Id='$appId']",$ns)
+    if($app){
+      $ve=$app.SelectSingleNode('uap:VisualElements',$ns)
+      if($ve){
+        $logoRel=$ve.GetAttribute('Square150x150Logo')
+        if(-not $logoRel){ $logoRel=$ve.GetAttribute('Square44x44Logo') }
+      }
+    }
+    if(-not $logoRel){
+      $logoNode=$manifest.SelectSingleNode('//a:Properties/a:Logo',$ns)
+      if($logoNode){ $logoRel=$logoNode.InnerText }
+    }
+    if(-not $logoRel){ return $null }
+    $src=Resolve-StoreAsset $pkg.InstallLocation $logoRel
+    if(-not $src){ return $null }
+    Copy-Item -LiteralPath $src -Destination $f -Force
+    return $f
+  }catch{ return $null }
+}
 '''
 
 _WIN_PS = _PS_ICON_FUNCS + r'''
 $sh=New-Object -ComObject WScript.Shell
 $out=New-Object System.Collections.ArrayList
 function Add-App($n,$p,$s){ if(-not $n -or -not $p){ return }; if($p.ToLower() -like '*\windows\*'){ return }; $ic=Save-Icon $p; [void]$out.Add([PSCustomObject]@{name="$n";path="$p";icon=$ic;src="$s"}) }
-function Add-Store($n,$id){ if(-not $n -or -not $id){ return }; [void]$out.Add([PSCustomObject]@{name="$n";path="shell:AppsFolder\$id";icon=$null;src='store'}) }
+function Add-Store($n,$id){
+  if(-not $n -or -not $id){ return }
+  $parts=$id -split '!',2
+  $family=$parts[0]
+  $appId=if($parts.Count -gt 1){ $parts[1] } else { 'App' }
+  $ic=Save-StoreIcon $family $appId
+  [void]$out.Add([PSCustomObject]@{name="$n";path="shell:AppsFolder\$id";icon=$ic;src='store'})
+}
 
 # An Uninstall entry without a usable DisplayIcon still knows where it was
 # installed, so fall back to the most plausible executable in that folder
@@ -219,8 +280,31 @@ $r=Save-Icon __EXE__
 if($r){ Write-Output $r }
 '''
 
+def _powershell_exe() -> str:
+    """Path to the *native* PowerShell, even when this process is 32-bit.
+
+    A 32-bit build launching plain "powershell" gets silently handed the
+    32-bit copy from SysWOW64 by Windows' file-system redirector — and that
+    32-bit powershell.exe is then itself subject to *registry* redirection,
+    so every HKLM query below, even the un-prefixed "SOFTWARE\\..." one that
+    is supposed to be the 64-bit view, comes back mapped into WOW6432Node.
+    A native 64-bit install that only ever wrote to the true
+    HKLM\\SOFTWARE\\...\\Uninstall — a system-wide VS Code, among others —
+    is invisible to it despite every registry path in the script looking
+    correct. %windir%\\Sysnative is the redirector's own escape hatch: the
+    path exists only from a 32-bit process and always resolves to the real
+    (64-bit) System32, sidestepping the problem instead of trying to work
+    around registry redirection from inside the script.
+    """
+    if sys.maxsize > 2**32 or os.name != "nt":
+        return "powershell"
+    sysnative = os.path.join(os.environ.get("windir", r"C:\Windows"),
+                             "Sysnative", "WindowsPowerShell", "v1.0", "powershell.exe")
+    return sysnative if os.path.isfile(sysnative) else "powershell"
+
+
 def _run_powershell(script: str, timeout: int = 60):
-    return subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+    return subprocess.run([_powershell_exe(), "-NoProfile", "-NonInteractive", "-Command", script],
                           capture_output=True, text=True, encoding="utf-8", errors="replace",
                           timeout=timeout, creationflags=0x08000000)
 

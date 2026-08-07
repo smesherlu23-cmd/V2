@@ -43,6 +43,7 @@ from .windows import (  # noqa: F401
     _discover_windows,
     _is_windows_system,
     _looks_like_junk,
+    _powershell_exe,
 )
 
 __all__ = [
