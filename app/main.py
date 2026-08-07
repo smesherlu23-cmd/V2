@@ -9,12 +9,11 @@ from pathlib import Path
 import flet as ft
 
 from app.core.hotkeys import (
+    SET_PREFIX,
     TOGGLE_LAUNCH,
     HotkeyManager,
-    app_for_accel,
-    quick_bindings,
-    set_bindings,
-    set_for_accel,
+    normalize_accel,
+    resolve_accels,
     split_binding,
 )
 from app.core.store import DEFAULT_LAUNCH_HOTKEY, Store
@@ -217,10 +216,12 @@ def main(page: ft.Page):
         launcher.set_apps(state["apps"])
         tray.refresh()
         if not is_web:
-            bindings = [(state["settings"].get("launch_hotkey") or DEFAULT_LAUNCH_HOTKEY,
-                         TOGGLE_LAUNCH)]
-            bindings += quick_bindings(state["apps"])
-            bindings += set_bindings(_ordered_sets(state))
+            launch = state["settings"].get("launch_hotkey") or DEFAULT_LAUNCH_HOTKEY
+            app_accels, set_slots = resolve_accels(state["apps"],
+                                                   _ordered_sets(state), launch)
+            bindings = ([(launch, TOGGLE_LAUNCH)]
+                        + [(accel, aid) for aid, accel in app_accels.items()]
+                        + [(accel, SET_PREFIX + sid) for sid, accel in set_slots.items()])
             hotkeys.register(bindings)
             rejected = set(hotkeys.rejected)
             if rejected and rejected != last_rejected:
@@ -259,12 +260,20 @@ def main(page: ft.Page):
             if hotkeys.handles(accel):
                 return
             state = store.state()
+            # Same resolution the listener used, so the in-window fallback
+            # fires the same target the global hotkey would have.
+            app_accels, set_slots = resolve_accels(
+                state["apps"], _ordered_sets(state),
+                state["settings"].get("launch_hotkey") or DEFAULT_LAUNCH_HOTKEY)
+            want = normalize_accel(accel)
             if e.alt:
-                set_id = set_for_accel(_ordered_sets(state), accel)
+                set_id = next((sid for sid, ac in set_slots.items()
+                               if normalize_accel(ac) == want), None)
                 if set_id:
                     ui.set_ops.launch_set(set_id)
                 return
-            app_id = app_for_accel(state["apps"], accel)
+            app_id = next((aid for aid, ac in app_accels.items()
+                           if normalize_accel(ac) == want), None)
             if app_id:
                 ui._launch(app_id)
     page.on_keyboard_event = on_key

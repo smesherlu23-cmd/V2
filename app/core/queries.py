@@ -71,6 +71,16 @@ def quick_apps(apps: list[dict]) -> list[dict]:
     return [a for a in apps if a.get("quick")]
 
 
+def hotkey_apps(apps: list[dict], accels: dict) -> list[dict]:
+    """Everything in the strip: pinned apps and anything with its own combo.
+
+    Keyed off the resolved accelerator map rather than the `quick` flag, so
+    an app given a custom hotkey shows up next to the pinned ones instead
+    of being reachable by a key that appears nowhere in the interface.
+    """
+    return [a for a in apps if a["id"] in accels]
+
+
 def build_sections(apps: list[dict], categories: list[dict], view: str,
                    sort: str, running: set) -> list[dict]:
     if view == "hidden":

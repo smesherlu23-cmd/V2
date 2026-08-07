@@ -3,7 +3,7 @@ from __future__ import annotations
 import flet as ft
 
 from ..core import queries
-from ..core.hotkeys import free_quick_slot
+from ..core.hotkeys import format_accel, free_quick_slot, split_accel
 from ..core.text import short_ago
 from . import colors as C
 from . import screens
@@ -12,6 +12,17 @@ from .format import T
 from .images import img_b64, is_launcher_art
 
 QUICK_H = 88
+
+
+def quick_slot_label(accel: str) -> str:
+    """The corner badge on a quick card.
+
+    An automatic Ctrl+N slot shows just the digit — the header already says
+    Ctrl+1…9. A custom combination shows in full, because the bare last
+    key ("E" for Ctrl+Shift+E) tells the user nothing about what to press.
+    """
+    mods, key = split_accel(accel)
+    return key.upper() if mods == {"ctrl"} and key.isdigit() else format_accel(accel)
 
 
 class GridView:
@@ -77,10 +88,13 @@ class GridView:
 
     def _quick_row(self):
         cards = [self._set_card(s) for s in self.ui.sets() if s.get("quick")]
-        for app in queries.quick_apps(queries.visible(self.ui.apps())):
+        for app in queries.hotkey_apps(queries.visible(self.ui.apps()), self.ui._accels):
             cards.append(self._quick_card(app, self.ui._accels.get(app["id"])))
         free = free_quick_slot(self.ui.apps())
-        if free and self._fits_in_row(len(cards)):
+        # An empty strip has to offer the placeholder, otherwise the header
+        # sits above nothing at all and there is no way in from here — the
+        # row-fitting check only makes sense once something is in the row.
+        if free and (not cards or self._fits_in_row(len(cards))):
             cards.append(self._quick_empty(free))
 
         head_row = [T("Быстрый запуск", size=14.5, weight=ft.FontWeight.BOLD, color=C.TEXT)]
@@ -104,12 +118,13 @@ class GridView:
         ], spacing=0, tight=True)]
         if accel and not self.ui.calm():
             layers.append(ft.Container(
-                T(accel.split("+")[-1], size=10.5, weight=ft.FontWeight.W_600,
+                T(quick_slot_label(accel), size=10.5, weight=ft.FontWeight.W_600,
                   color=C.TEXT_FAINT, font_family="monospace"), right=9, top=9))
         card = ft.Container(
             ft.Stack(layers), width=C.QUICK_W, height=QUICK_H, bgcolor=C.PANEL,
             border=ft.border.all(1, C.CONTROL), border_radius=12,
             padding=ft.padding.all(12),
+            tooltip=f"{app['name']} · {format_accel(accel)}" if accel else app["name"],
             on_click=lambda e, i=app["id"]: self.ui._launch(i))
         Wg.hoverable(card, C.PANEL, C.SELECTED_BG)
         return ft.GestureDetector(card,

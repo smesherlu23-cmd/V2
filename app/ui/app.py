@@ -12,8 +12,8 @@ from ..controllers.scan import ScanController
 from ..controllers.sets import SetsController
 from ..controllers.triage import TriageController
 from ..core import queries
-from ..core.hotkeys import quick_accels, set_accels
-from ..core.store import Store
+from ..core.hotkeys import normalize_accel, resolve_accels
+from ..core.store import DEFAULT_LAUNCH_HOTKEY, Store
 from ..core.text import plu_apps, plu_programs, plu_windows
 from ..core.view_state import ViewState
 from ..infra import log
@@ -255,8 +255,9 @@ class CenturioUI:
         with self._refresh_lock:
             self._snapshot = self.store.state()
             self._settings = self._snapshot["settings"]
-            self._accels = quick_accels(self._snapshot["apps"])
-            self._set_accels = set_accels(self.sets())
+            self._accels, self._set_accels = resolve_accels(
+                self._snapshot["apps"], self.sets(),
+                self._settings.get("launch_hotkey") or DEFAULT_LAUNCH_HOTKEY)
             self._cat_index = {c["id"]: c for c in self._snapshot["categories"]}
             self._tile_epoch = (
                 self._settings.get("tile_size"),
@@ -696,7 +697,9 @@ class CenturioUI:
     def _toggle_quick(self, app_id, value):
         self.store.update_app(app_id, {"quick": bool(value)})
         self.on_library_changed()
-        accel = quick_accels(self.store.state()["apps"]).get(app_id)
+        # on_library_changed refreshed, so _accels already holds the freshly
+        # resolved slots — no need to work them out a second time.
+        accel = self._accels.get(app_id)
         self.toast.show(f"Закреплено · {accel}" if value and accel
                         else "Закреплено" if value else "Откреплено",
                         icon=ft.Icons.BOLT, icon_color=C.MUTED)
@@ -720,22 +723,25 @@ class CenturioUI:
     def _hotkey_clash(self, accel, skip_app_id=None, check_launch=True):
         """Who already holds `accel`, phrased for the "уже занята — …" toast, or None if free.
 
-        Checks the launch hotkey, every app's custom hotkey and every set's
-        slot (explicit or auto-assigned Ctrl+Alt+N) — the three places a
-        combo can be taken. Set slots are recomputed fresh from self.sets()
-        rather than the last refresh()'s cached self._set_accels, so a
-        clash check made mid-capture still sees current data.
+        Checks the launch hotkey, every app's own combination and every
+        set's slot (explicit or auto-assigned Ctrl+Alt+N) — the three
+        places a combination can be taken. Compares normalised forms, so
+        Ctrl+Escape and Ctrl+Esc count as the same key rather than as two
+        free ones that then collide inside the listener.
         """
-        if check_launch and accel.lower() == (self.setting("launch_hotkey") or "").lower():
+        want = normalize_accel(accel)
+        launch = self.setting("launch_hotkey") or DEFAULT_LAUNCH_HOTKEY
+        if check_launch and want == normalize_accel(launch):
             return "вызовом Centurio"
         clash = next((a for a in self.apps()
                       if a["id"] != skip_app_id
-                      and (a.get("hotkey") or "").lower() == accel.lower()), None)
+                      and normalize_accel(a.get("hotkey") or "") == want), None)
         if clash:
             return f"«{clash['name']}»"
-        set_slots = set_accels(self.sets())
-        set_clash = next((rec for rec in self.sets()
-                          if (set_slots.get(rec["id"]) or "").lower() == accel.lower()), None)
+        sets = self.sets()
+        _apps, set_slots = resolve_accels(self.apps(), sets, launch)
+        set_clash = next((rec for rec in sets
+                          if normalize_accel(set_slots.get(rec["id"]) or "") == want), None)
         return f"набором «{set_clash['name']}»" if set_clash else None
 
     def _set_hotkey(self, app_id, accel):
