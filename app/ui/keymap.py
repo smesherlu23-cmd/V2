@@ -3,7 +3,7 @@ from __future__ import annotations
 import flet as ft
 
 from ..core import queries
-from ..core.hotkeys import is_reserved
+from ..core.hotkeys import is_bindable
 
 
 class Keymap:
@@ -113,15 +113,16 @@ class Keymap:
         key = "Space" if e.key == " " else (e.key or "")
         if key in ("Control", "Alt", "Shift", "Meta"):
             return
-        if key == "Escape":
+        if key == "Escape" and not (e.ctrl or e.alt or e.shift or e.meta):
             self.ui._stop_capture()
             self.ui.refresh()
             return
         parts = [name for flag, name in ((e.ctrl, "Ctrl"), (e.alt, "Alt"),
                                          (e.shift, "Shift"), (e.meta, "Win")) if flag]
         accel = "+".join(parts + [key if len(key) > 1 else key.upper()])
-        if is_reserved(accel):
-            self.ui.toast.error(f"{accel} занята Windows — эту комбинацию система не отдаст")
+        ok, reason = is_bindable(accel)
+        if not ok:
+            self.ui.toast.error(f"{accel}: {reason}")
             return
         target = self.ui.view.capture_target
         self.ui._stop_capture()
