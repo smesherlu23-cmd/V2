@@ -862,6 +862,23 @@ class CenturioUI:
         self.store.move_category(cat_id, delta)
         self.refresh()
 
+    def _reorder_category(self, dragged_id, target_id):
+        """Drop one category tile onto another to move it there directly.
+
+        Same insert-before-target idea as chrome.drop_set_item for набор
+        items — pull the dragged id out, insert it just ahead of the one it
+        was dropped on, persist the whole order in one write.
+        """
+        if dragged_id == target_id:
+            return
+        ids = [c["id"] for c in self.categories()]
+        if dragged_id not in ids or target_id not in ids:
+            return
+        ids.remove(dragged_id)
+        ids.insert(ids.index(target_id), dragged_id)
+        self.store.reorder_categories(ids)
+        self.refresh()
+
     def _open_popover(self, cat_id):
         self.view.open_popover(cat_id)
         self.refresh()

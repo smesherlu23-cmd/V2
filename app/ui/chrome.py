@@ -67,7 +67,8 @@ class Chrome:
         )
 
     def _rail_item(self, glyph, active, on_click, tooltip, fixed_color=None,
-                   on_drop_app=None, on_context=None, badge=None, outlined=False):
+                   on_drop_app=None, on_drop_category=None, on_context=None,
+                   badge=None, outlined=False):
         btn = self.ui.rail()["btn"]
         # Discord's squircle-on-select: a circle at rest, rounded square when
         # active. Both radii track the button so the shape reads the same at
@@ -105,16 +106,23 @@ class Chrome:
             on_secondary_tap_down=(lambda e: on_context(e)) if on_context else None)
 
         content = tapper
-        if on_drop_app is not None:
+        if on_drop_app is not None or on_drop_category is not None:
             def _accept(e):
                 src = self.ui.page.get_control(e.src_id)
                 payload = getattr(src, "data", None) if src is not None else None
                 inner.border = ft.border.all(1, C.LINE_4) if outlined else None
                 Wg.safe_update(inner)
-                if isinstance(payload, dict) and payload.get("ids"):
-                    on_drop_app(payload["ids"])
-                elif payload:
-                    on_drop_app([payload])
+                # A dragged category tile and a dragged app tile share the
+                # "apps" DragTarget group (Flet targets can only listen to
+                # one group at a time) — the dict shape tells them apart.
+                if isinstance(payload, dict) and payload.get("category_id"):
+                    if on_drop_category:
+                        on_drop_category(payload["category_id"])
+                elif on_drop_app is not None:
+                    if isinstance(payload, dict) and payload.get("ids"):
+                        on_drop_app(payload["ids"])
+                    elif payload:
+                        on_drop_app([payload])
 
             def _will(e):
                 inner.border = ft.border.all(2, self.ui._accent())
@@ -174,13 +182,22 @@ class Chrome:
         cats = []
         for cat in self.ui.categories():
             active = self.ui.view.filter == f"category:{cat['id']}" and on_grid
-            cats.append(self._rail_item(
+            item = self._rail_item(
                 Wg.cat_glyph(cat, size=glyph, color=C.TEXT if active else None,
                              fill=btn), active,
                 lambda cid=cat["id"]: self.ui._set_filter(f"category:{cid}"), cat["name"],
                 fixed_color=C.category_color(cat),
                 on_drop_app=lambda ids, cid=cat["id"]: self.ui._move_apps_to_category(ids, cid),
-                on_context=lambda e, c=cat: self.ui.context_menus.category_menu(c, e)))
+                on_drop_category=lambda dragged, cid=cat["id"]: self.ui._reorder_category(
+                    dragged, cid),
+                on_context=lambda e, c=cat: self.ui.context_menus.category_menu(c, e))
+            # Draggable so the tile can be dragged onto another category to
+            # reorder — a raw drag of the badge itself, not just the
+            # existing up/down menu entries. Same "apps" group as app tiles
+            # (see _rail_item._accept): the {"category_id": ...} shape is
+            # what tells the two kinds of drop apart.
+            cats.append(ft.Draggable(group="apps", content=item,
+                                     data={"category_id": cat["id"]}))
         add = ft.Container(ft.Icon(ft.Icons.ADD, size=glyph - 3, color=C.TEXT_FAINT),
                            width=btn, height=btn, border_radius=btn / 2,
                            alignment=ft.alignment.center,

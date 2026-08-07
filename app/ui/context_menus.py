@@ -98,8 +98,7 @@ class ContextMenus:
         index = [c["id"] for c in cats].index(cat["id"]) if cat["id"] in [c["id"] for c in cats] else 0
         count = sum(1 for a in self.ui.apps() if a.get("category_id") == cat["id"])
         rows = [
-            menus.item(ft.Icons.EDIT, "Переименовать", lambda: self.ui._open_popover(cat["id"])),
-            menus.item(ft.Icons.PALETTE, "Цвет и иконка", lambda: self.ui._open_popover(cat["id"])),
+            menus.item(ft.Icons.EDIT, "Изменить", lambda: self.ui._open_popover(cat["id"])),
             menus.item(ft.Icons.ARROW_UPWARD, "Переместить выше",
                        lambda: self.ui._move_category(cat["id"], -1), disabled=index == 0),
             menus.item(ft.Icons.ARROW_DOWNWARD, "Переместить ниже",
