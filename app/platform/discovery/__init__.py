@@ -40,10 +40,13 @@ from .steam_paths import (  # noqa: F401
 from .windows import (  # noqa: F401
     _WIN_ICON_ONE_PS,
     _WIN_PS,
+    _WIN_STORE_ICON_ONE_PS,
     _discover_windows,
     _is_windows_system,
     _looks_like_junk,
     _powershell_exe,
+    _win_extract_store_one,
+    store_parts,
 )
 
 __all__ = [

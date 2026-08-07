@@ -150,12 +150,25 @@ function Resolve-StoreAsset($dir,$rel){
   $ext=[System.IO.Path]::GetExtension($rel)
   $found=@(Get-ChildItem -LiteralPath $folder -Filter "$stem*$ext" -File 2>$null)
   if($found.Count -eq 0){ return $null }
-  # Scaled/qualified variants sit alongside the bare name Manifest names
+  # Scaled/qualified variants sit alongside the bare name the manifest gives
   # (AppIcon.scale-200.png, ...targetsize-256_altform-unplated.png); prefer
-  # an unplated (no colored backplate) one, then the largest file.
-  $best=$found | Sort-Object -Property @{Expression={$_.Name -notmatch 'unplated'}},
-                                       @{Expression='Length';Descending=$true} | Select-Object -First 1
+  # an unplated one (no colored backplate baked in — our own icon slot
+  # already draws its own background) and the largest file otherwise.
+  $unplated=@($found | Where-Object { $_.Name -match 'unplated' })
+  $pool=if($unplated.Count -gt 0){ $unplated } else { $found }
+  $best=$pool | Sort-Object Length -Descending | Select-Object -First 1
   return $best.FullName
+}
+# XML-namespace-aware parsing of AppxManifest.xml kept missing perfectly
+# ordinary manifests: packaging tools disagree on which prefix (uap, uap5,
+# uap10...) carries VisualElements from one schema version to the next, and
+# [xml] casting itself can choke on encoding quirks some manifests have.
+# Regex on the raw text only cares about the attribute *names*, which stay
+# stable, so it works regardless of which prefix a given package used.
+function Get-LogoAttr($text,$attr){
+  $m=[regex]::Match($text,"$attr\s*=\s*`"([^`"]+)`"")
+  if($m.Success){ return $m.Groups[1].Value }
+  return $null
 }
 function Save-StoreIcon($family,$appId){
   if(-not $cache -or -not $family){ return $null }
@@ -166,22 +179,22 @@ function Save-StoreIcon($family,$appId){
     if(-not $pkg -or -not $pkg.InstallLocation){ return $null }
     $manifestPath=Join-Path $pkg.InstallLocation 'AppxManifest.xml'
     if(-not (Test-Path -LiteralPath $manifestPath)){ return $null }
-    [xml]$manifest=Get-Content -LiteralPath $manifestPath -Raw
-    $ns=New-Object System.Xml.XmlNamespaceManager($manifest.NameTable)
-    $ns.AddNamespace('a',$manifest.DocumentElement.NamespaceURI)
-    $ns.AddNamespace('uap','http://schemas.microsoft.com/appx/manifest/uap/windows10')
+    $text=Get-Content -LiteralPath $manifestPath -Raw
     $logoRel=$null
-    $app=$manifest.SelectSingleNode("//a:Applications/a:Application[@Id='$appId']",$ns)
-    if($app){
-      $ve=$app.SelectSingleNode('uap:VisualElements',$ns)
-      if($ve){
-        $logoRel=$ve.GetAttribute('Square150x150Logo')
-        if(-not $logoRel){ $logoRel=$ve.GetAttribute('Square44x44Logo') }
+    if($appId){
+      $esc=[regex]::Escape($appId)
+      $block=[regex]::Match($text,"<Application[^>]*Id=`"$esc`"[^>]*>.*?</Application>",
+                            [System.Text.RegularExpressions.RegexOptions]::Singleline)
+      if($block.Success){
+        $logoRel=Get-LogoAttr $block.Value 'Square150x150Logo'
+        if(-not $logoRel){ $logoRel=Get-LogoAttr $block.Value 'Square44x44Logo' }
       }
     }
+    if(-not $logoRel){ $logoRel=Get-LogoAttr $text 'Square150x150Logo' }
+    if(-not $logoRel){ $logoRel=Get-LogoAttr $text 'Square44x44Logo' }
     if(-not $logoRel){
-      $logoNode=$manifest.SelectSingleNode('//a:Properties/a:Logo',$ns)
-      if($logoNode){ $logoRel=$logoNode.InnerText }
+      $m=[regex]::Match($text,'<Logo>([^<]+)</Logo>')
+      if($m.Success){ $logoRel=$m.Groups[1].Value }
     }
     if(-not $logoRel){ return $null }
     $src=Resolve-StoreAsset $pkg.InstallLocation $logoRel
@@ -280,6 +293,13 @@ $r=Save-Icon __EXE__
 if($r){ Write-Output $r }
 '''
 
+_WIN_STORE_ICON_ONE_PS = _PS_ICON_FUNCS + r'''
+$r=Save-StoreIcon __FAMILY__ __APPID__
+if($r){ Write-Output $r }
+'''
+
+_STORE_PATH_RE = re.compile(r"^shell:appsfolder\\([^!]+)(?:!(.*))?$", re.IGNORECASE)
+
 def _powershell_exe() -> str:
     """Path to the *native* PowerShell, even when this process is 32-bit.
 
@@ -326,10 +346,20 @@ def _discover_windows(icon_cache: str | None) -> list[dict]:
     res = _run_powershell(ps, timeout=90)
     out = (res.stdout or "").strip()
     if not out:
+        # A parse-time error in the script (as opposed to a runtime one
+        # inside a try/catch) aborts before a single Add-App/Add-Store call
+        # runs, so this is "found nothing at all", not "found nothing new" —
+        # worth a line in the log, since it otherwise looks identical to an
+        # empty Start Menu.
+        if res.returncode != 0 or res.stderr:
+            log.warning("обнаружение программ Windows: пустой вывод PowerShell "
+                       "(код %s): %s", res.returncode, (res.stderr or "").strip()[:2000])
         return []
     try:
         data = json.loads(out)
     except json.JSONDecodeError:
+        log.warning("обнаружение программ Windows: вывод PowerShell не в формате JSON: %s",
+                   out[:2000])
         return []
     if isinstance(data, dict):
         data = [data]
@@ -352,6 +382,38 @@ def _win_extract_one(path: str, icon_cache: str) -> str | None:
         res = _run_powershell(ps, timeout=25)
     except Exception:
         log.exception("_win_extract_one powershell fail %s", path)
+        return None
+    out = (res.stdout or "").strip().splitlines()
+    out = out[-1].strip() if out else ""
+    return out if out and os.path.exists(out) else None
+
+
+def store_parts(path: str) -> tuple[str, str] | None:
+    """(family, appId) out of a "shell:AppsFolder\\<family>!<appId>" path."""
+    m = _STORE_PATH_RE.match((path or "").strip())
+    if not m:
+        return None
+    return m.group(1), (m.group(2) or "App")
+
+
+def _win_extract_store_one(path: str, icon_cache: str) -> str | None:
+    """Retry a Store app's icon after the fact.
+
+    Initial discovery already tries this for every Store entry it finds
+    (Save-StoreIcon in _WIN_PS); this is what a later rescan/backfill calls
+    for one whose first attempt came back empty — Get-AppxPackage can fail
+    transiently, or the app may not have been fully registered yet.
+    """
+    parts = store_parts(path)
+    if parts is None:
+        return None
+    family, app_id = parts
+    ps = (_WIN_STORE_ICON_ONE_PS.replace("__CACHE__", _ps_literal(icon_cache))
+         .replace("__FAMILY__", _ps_literal(family)).replace("__APPID__", _ps_literal(app_id)))
+    try:
+        res = _run_powershell(ps, timeout=25)
+    except Exception:
+        log.exception("_win_extract_store_one powershell fail %s", path)
         return None
     out = (res.stdout or "").strip().splitlines()
     out = out[-1].strip() if out else ""

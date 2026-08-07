@@ -1348,6 +1348,8 @@ def test_discovery():
     for name, tmpl, subs in [
         ("_WIN_PS", discovery._WIN_PS, {"__DIRS__": "'C:\\x'", "__CACHE__": "'C:\\c'"}),
         ("_WIN_ICON_ONE_PS", discovery._WIN_ICON_ONE_PS, {"__CACHE__": "'C:\\c'", "__EXE__": "'C:\\a.exe'"}),
+        ("_WIN_STORE_ICON_ONE_PS", discovery._WIN_STORE_ICON_ONE_PS,
+         {"__CACHE__": "'C:\\c'", "__FAMILY__": "'Fam_8wek'", "__APPID__": "'App'"}),
     ]:
         s = tmpl
         for k, v in subs.items():
@@ -1355,11 +1357,42 @@ def test_discovery():
         ok(s.count("{") == s.count("}"), f"{name}: braces balanced")
         ok(s.count('@"') == s.count('"@'), f"{name}: here-strings balanced")
         ok(s.count("'") % 2 == 0, f"{name}: single quotes balanced")
-        remaining = [k for k in ("__DIRS__", "__CACHE__", "__EXE__") if k in s]
+        remaining = [k for k in ("__DIRS__", "__CACHE__", "__EXE__", "__FAMILY__", "__APPID__")
+                    if k in s]
         ok(not remaining, f"{name}: all placeholders substituted")
 
-    for fn in ("Best-Exe", "Get-StartApps", "Save-StoreIcon", "Resolve-StoreAsset", "Add-Store"):
+    for fn in ("Best-Exe", "Get-StartApps", "Save-StoreIcon", "Resolve-StoreAsset", "Add-Store",
+              "Get-LogoAttr"):
         ok(fn in discovery._WIN_PS, f"_WIN_PS defines/calls {fn}")
+
+    ok(discovery.store_parts("shell:AppsFolder\\Contoso.App_8wekyb3d8bbwe!App")
+       == ("Contoso.App_8wekyb3d8bbwe", "App"), "store_parts splits family and appId on '!'")
+    ok(discovery.store_parts("shell:AppsFolder\\NoBang_8wekyb3d8bbwe")
+       == ("NoBang_8wekyb3d8bbwe", "App"), "and defaults the appId when there's no '!' at all")
+    ok(discovery.store_parts(r"C:\ordinary\path.exe") is None,
+       "an ordinary file path is not a Store path")
+
+    # A Store app's icon isn't just tried once at discovery time — a later
+    # rescan/backfill has to be able to retry it too, the same way an .exe's
+    # icon can be. resolve_icon_for used to fall straight through to the
+    # .exe branch (endswith('.exe') is False for a shell: path) and give up.
+    # icons.py calls windows._win_extract_store_one directly (not through
+    # this package's re-export), so that's what has to be patched.
+    from app.platform.discovery import windows as _win_mod
+    real_extract, real_os_name = _win_mod._win_extract_store_one, os.name
+    calls = []
+    try:
+        os.name = "nt"
+        _win_mod._win_extract_store_one = (
+            lambda path, cache: calls.append((path, cache)) or "/cache/store.png")
+        icon, fit = discovery.resolve_icon_for(
+            "shell:AppsFolder\\Contoso.App_8wekyb3d8bbwe!App", "/cache")
+        ok(icon == "/cache/store.png" and fit == "contain",
+           "resolve_icon_for routes a Store path to the Store retry")
+        ok(calls == [("shell:AppsFolder\\Contoso.App_8wekyb3d8bbwe!App", "/cache")],
+           "with the path and cache dir passed through untouched")
+    finally:
+        _win_mod._win_extract_store_one, os.name = real_extract, real_os_name
 
     # 32-bit builds get silently handed the 32-bit PowerShell, whose HKLM
     # queries are then themselves registry-redirected — a native 64-bit-only
