@@ -2318,8 +2318,10 @@ def test_ui_context_menus():
 
         ui.context_menus.category_menu(store.state()["categories"][0], _tap())
         labels = _menu_labels(ui)
-        for entry in ("Переименовать", "Цвет и иконка", "Удалить категорию"):
+        for entry in ("Изменить", "Удалить категорию"):
             ok(entry in labels, f"the category menu offers «{entry}»")
+        ok("Переименовать" not in labels and "Цвет и иконка" not in labels,
+           "rename and colour/icon used to be two entries opening the same popover")
         ok("Переместить выше" in labels, "and reordering")
         first_row = next(r for r in ui.menu._rows
                          if r["kind"] == "item" and r["label"] == "Переместить выше")
