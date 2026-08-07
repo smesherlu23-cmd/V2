@@ -1372,6 +1372,27 @@ def test_discovery():
     ok(discovery.store_parts(r"C:\ordinary\path.exe") is None,
        "an ordinary file path is not a Store path")
 
+    # raw_windows_entries is what app.diagnose uses to tell "PowerShell
+    # never found this program" apart from "we found it and our own filter
+    # dropped it" — discover_apps()'s filtered count alone can't say which.
+    from app.platform.discovery import windows as _win_mod
+    real_run = _win_mod._run_powershell
+    try:
+        _win_mod._run_powershell = lambda script, timeout=60: types_ns(
+            stdout='[{"name":"A","path":"C:/a.exe","src":"registry"}]',
+            stderr="", returncode=0)
+        data, stderr, code = discovery.raw_windows_entries(None)
+        ok(data == [{"name": "A", "path": "C:/a.exe", "src": "registry"}] and code == 0,
+           "raw_windows_entries hands back the parsed JSON untouched by any filter")
+
+        _win_mod._run_powershell = lambda script, timeout=60: types_ns(
+            stdout="", stderr="ParserError: unexpected token", returncode=1)
+        data, stderr, code = discovery.raw_windows_entries(None)
+        ok(data == [] and code == 1 and "ParserError" in stderr,
+           "a script-level failure comes back as an empty list plus the reason, not silence")
+    finally:
+        _win_mod._run_powershell = real_run
+
     # A Store app's icon isn't just tried once at discovery time — a later
     # rescan/backfill has to be able to retry it too, the same way an .exe's
     # icon can be. resolve_icon_for used to fall straight through to the
