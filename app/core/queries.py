@@ -15,11 +15,12 @@ SOURCES = {
     "steam": {"label": "Steam", "icon": "sports_esports", "cat": "games"},
     "epic": {"label": "Epic Games", "icon": "casino", "cat": "games"},
     "startmenu": {"label": "Меню «Пуск»", "icon": "apps", "cat": None},
+    "store": {"label": "Microsoft Store", "icon": "shopping_cart", "cat": None},
     "registry": {"label": "Реестр", "icon": "data_object", "cat": None},
     "manual": {"label": "Вручную", "icon": "folder_open", "cat": None},
     "": {"label": "Другое", "icon": "folder", "cat": None},
 }
-SOURCE_ORDER = ("manual", "steam", "epic", "startmenu", "registry", "")
+SOURCE_ORDER = ("manual", "steam", "epic", "startmenu", "store", "registry", "")
 
 _CATEGORY_HINTS = (
     ("dev", ("jetbrains", "pycharm", "intellij", "webstorm", "rider", "clion", "goland",
