@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Builds Centurio's Windows release: `flet build windows`, then (if
     Inno Setup is installed) the CenturioSetup.exe installer.
