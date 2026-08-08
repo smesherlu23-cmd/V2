@@ -9,13 +9,21 @@ from ..format import T, cat_icon
 from .common import _field, _screen_header
 
 
+def _add_state(ui):
+    state = ui._add_ui
+    if state is not None:
+        return state
+    state = {"root": ft.Column([], spacing=0, expand=True)}
+    ui._add_ui = state
+    return state
+
+
 def build_add_screen(ui):
-    if ui.scan.scanning():
-        body = _scanning(ui)
-    else:
-        body = _found_list(ui)
-    return ft.Column([_add_header(ui), _add_search(ui), body, _add_footer(ui)],
-                     spacing=0, expand=True)
+    state = _add_state(ui)
+    root = state["root"]
+    body = _scanning(ui) if ui.scan.scanning() else _found_list(ui, state)
+    root.controls = [_add_header(ui), _add_search(ui, state), body, _add_footer(ui)]
+    return root
 
 
 def _add_header(ui):
@@ -42,16 +50,71 @@ def _add_header(ui):
                           ui.back_to_grid, extra=[rescan])
 
 
-def _add_search(ui):
-    if ui.scan.scanning():
-        return ft.Container(height=0)
-    search = ft.Container(
+def _add_search_field(ui, state):
+    field = state.get("search_field")
+    if field is None:
+        field = _field(ui.view.add_query, "Название программы",
+                       on_change=lambda e: ui.scan.set_add_query(e.control.value))
+        state["search_field"] = field
+    elif not ui.view.add_query and field.value:
+        field.value = ""
+    return field
+
+
+def _add_path_field(ui, state):
+    field = state.get("path_field")
+    if field is None:
+        field = _field(ui.view.manual_path,
+                       r"Или вставьте путь: C:\Program Files\…\app.exe",
+                       on_change=lambda e: ui.scan.set_manual_path(e.control.value),
+                       on_submit=lambda e: ui.scan.add_manual_path(e.control.value),
+                       mono=True, size=11.5)
+        state["path_field"] = field
+    elif not ui.view.manual_path and field.value:
+        field.value = ""
+    return field
+
+
+def _add_search_container(ui, state):
+    box = state.get("search_box")
+    if box is not None:
+        return box
+    box = ft.Container(
         ft.Row([ft.Icon(ft.Icons.SEARCH, size=15, color=C.MUTED_2),
-                _field(ui.view.add_query, "Название программы",
-                       on_change=lambda e: ui.scan.set_add_query(e.control.value))],
+                _add_search_field(ui, state)],
                spacing=9, vertical_alignment=ft.CrossAxisAlignment.CENTER),
         height=36, bgcolor=C.PANEL, border=ft.border.all(1, C.LINE), border_radius=9,
         padding=ft.padding.symmetric(0, 12), expand=True)
+    state["search_box"] = box
+    return box
+
+
+def _add_path_container(ui, state):
+    box = state.get("path_box")
+    if box is not None:
+        return box
+    box = ft.Container(
+        ft.Row([ft.Icon(ft.Icons.LINK, size=15, color=C.MUTED_2),
+                _add_path_field(ui, state)],
+               spacing=9, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        height=36, bgcolor=C.SET_BG, border=ft.border.all(1, C.LINE_4), border_radius=9,
+        padding=ft.padding.symmetric(0, 12), expand=True)
+    state["path_box"] = box
+    return box
+
+
+def _add_search(ui, state):
+    holder = state.get("search_col")
+    if holder is None:
+        holder = ft.Column([], spacing=0, tight=True)
+        state["search_col"] = holder
+    if ui.scan.scanning():
+        holder.controls = []
+        return holder
+
+    _add_search_field(ui, state)
+    _add_path_field(ui, state)
+
     only_new = ft.Container(
         ft.Row([T("Только новые", size=12.5, color=C.TEXT),
                 Wg.toggle(ui.view.only_new, lambda v: ui.scan.toggle_only_new(), ui._accent())],
@@ -60,26 +123,28 @@ def _add_search(ui):
         border=ft.border.all(1, C.LINE), border_radius=9,
         on_click=lambda e: ui.scan.toggle_only_new())
 
-    path_field = ft.Container(
-        ft.Row([ft.Icon(ft.Icons.LINK, size=15, color=C.MUTED_2),
-                _field(ui.view.manual_path,
-                       r"Или вставьте путь: C:\Program Files\…\app.exe",
-                       on_change=lambda e: ui.scan.set_manual_path(e.control.value),
-                       on_submit=lambda e: ui.scan.add_manual_path(e.control.value),
-                       mono=True, size=11.5)],
-               spacing=9, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        height=36, bgcolor=C.SET_BG, border=ft.border.all(1, C.LINE_4), border_radius=9,
-        padding=ft.padding.symmetric(0, 12), expand=True)
+    search_row = state.get("search_row")
+    if search_row is None:
+        search_row = ft.Row([], spacing=10)
+        state["search_row"] = search_row
+        state["search_row_holder"] = ft.Container(
+            search_row, padding=ft.padding.only(24, 14, 24, 6))
+    search_row.controls = [_add_search_container(ui, state), only_new]
 
-    return ft.Column([
-        ft.Container(ft.Row([search, only_new], spacing=10),
-                     padding=ft.padding.only(24, 14, 24, 6)),
-        ft.Container(ft.Row([path_field,
-                             Wg.outline_btn("Обзор", ui.scan.pick_file, ft.Icons.FOLDER_OPEN),
-                             Wg.outline_btn("Добавить путь", ui.scan.add_manual_path)],
-                            spacing=10),
-                     padding=ft.padding.only(24, 0, 24, 12)),
-    ], spacing=0, tight=True)
+    path_row = state.get("path_row")
+    if path_row is None:
+        path_row = ft.Row([], spacing=10)
+        state["path_row"] = path_row
+        state["path_row_holder"] = ft.Container(
+            path_row, padding=ft.padding.only(24, 0, 24, 12))
+    path_row.controls = [
+        _add_path_container(ui, state),
+        Wg.outline_btn("Обзор", ui.scan.pick_file, ft.Icons.FOLDER_OPEN),
+        Wg.outline_btn("Добавить путь", ui.scan.add_manual_path),
+    ]
+
+    holder.controls = [state["search_row_holder"], state["path_row_holder"]]
+    return holder
 
 
 def _scanning(ui):
@@ -91,15 +156,23 @@ def _scanning(ui):
         expand=True, alignment=ft.alignment.center)
 
 
-def _found_list(ui):
+def _found_list(ui, state):
     groups = ui.scan.found_groups()
     rows = [_inline_error(ui, err) for err in ui.scan.scan_errors()]
     if not groups:
         rows.append(_add_empty(ui))
     for group in groups:
         rows.append(_add_group(ui, group))
-    return ft.Container(ft.Column(rows, spacing=2, scroll=ft.ScrollMode.AUTO, expand=True),
-                        expand=True, padding=ft.padding.only(24, 0, 24, 8))
+
+    col = state.get("rows_col")
+    if col is None:
+        col = ft.Column(rows, spacing=2, scroll=ft.ScrollMode.AUTO, expand=True)
+        state["rows_col"] = col
+        holder = ft.Container(col, expand=True, padding=ft.padding.only(24, 0, 24, 8))
+        state["rows_holder"] = holder
+    else:
+        col.controls = rows
+    return state["rows_holder"]
 
 
 def _inline_error(ui, err):

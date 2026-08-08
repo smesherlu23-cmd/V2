@@ -467,6 +467,43 @@ def test_discovery_sources():
                 os.environ["USERPROFILE"] = old
 
 
+def test_store_icon_trim():
+    """Store-иконки часто «unplated»: значок — маленький остров прозрачности
+    посреди холста. Обрезка должна вернуть его к почти полному кадру."""
+    from app.platform import discovery
+
+    Image = __import__("PIL.Image", fromlist=["Image"])
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "icon.png")
+        im = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
+        for x in range(70, 130):
+            for y in range(70, 130):
+                im.putpixel((x, y), (10, 200, 10, 255))
+        im.save(path)
+
+        discovery.trim_transparent_padding(path)
+
+        with Image.open(path) as trimmed:
+            tw, th = trimmed.size
+            bbox = trimmed.split()[-1].getbbox()
+        ok(tw < 150 and th < 150, "the padded canvas shrinks a lot")
+        ok(bbox[2] - bbox[0] >= tw * 0.8 and bbox[3] - bbox[1] >= th * 0.8,
+           "and the glyph now fills most of the new, tighter canvas")
+
+        already_tight = os.path.join(d, "tight.png")
+        tight = Image.new("RGBA", (64, 64), (10, 200, 10, 255))
+        tight.save(already_tight)
+        before = os.path.getmtime(already_tight)
+        discovery.trim_transparent_padding(already_tight)
+        ok(os.path.getmtime(already_tight) == before,
+           "an icon that already fills its canvas is left untouched")
+
+        blank = os.path.join(d, "blank.png")
+        Image.new("RGBA", (32, 32), (0, 0, 0, 0)).save(blank)
+        discovery.trim_transparent_padding(blank)  # must not raise on a fully transparent image
+        ok(os.path.exists(blank), "a fully transparent icon doesn't crash the trim")
+
+
 def test_store_concurrency():
     import threading
     with tempfile.TemporaryDirectory() as d:
@@ -3003,7 +3040,22 @@ def test_ui_add_screen():
             ok(all(r["is_new"] for g in groups for r in g["rows"]),
                "«Только новые» is on by default")
 
+            # Пересборка экрана не должна пересоздавать поле поиска и
+            # список найденного — иначе фокус слетает на каждую букву,
+            # а прокрутка — на каждый клик по чекбоксу.
+            search_field = ui._add_ui["search_field"]
+            rows_col = ui._add_ui["rows_col"]
+            ui.scan.set_add_query("o")
+            ok(ui._add_ui["search_field"] is search_field,
+               "typing keeps the very same TextField — it never loses focus")
+            ok(ui._add_ui["rows_col"] is rows_col,
+               "the scrollable results column is the same object too — scroll position holds")
+            ui.scan.set_add_query("")
+
             ui.scan.toggle_only_new()
+            ok(ui._add_ui["search_field"] is search_field
+               and ui._add_ui["rows_col"] is rows_col,
+               "toggling «Только новые» reuses them as well")
             names = [r["name"] for g in ui.scan.found_groups() for r in g["rows"]]
             ok("Notion" in names, "turning it off shows what is already there")
 

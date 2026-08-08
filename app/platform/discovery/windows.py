@@ -335,6 +335,41 @@ def raw_windows_entries(icon_cache: str | None) -> tuple[list[dict], str, int]:
     return (data if isinstance(data, list) else [data]), stderr, res.returncode
 
 
+def trim_transparent_padding(path: str, min_content_ratio: float = 0.85) -> None:
+    """Многие иконки Store — «unplated»: сам значок занимает едва половину
+    квадратного холста, остальное — прозрачное поле под цветную плитку,
+    которую мы не рисуем. Обрезаем прозрачные поля с небольшим отступом,
+    чтобы значок не выглядел игрушечным в плитке или строке списка."""
+    try:
+        from PIL import Image
+    except Exception:
+        return
+    try:
+        with Image.open(path) as im:
+            im = im.convert("RGBA")
+            w, h = im.size
+            if not w or not h:
+                return
+            bbox = im.split()[-1].getbbox()
+            if not bbox:
+                return
+            x0, y0, x1, y1 = bbox
+            if (x1 - x0) >= w * min_content_ratio and (y1 - y0) >= h * min_content_ratio:
+                return
+            pad_x = max(2, round((x1 - x0) * 0.08))
+            pad_y = max(2, round((y1 - y0) * 0.08))
+            x0, y0 = max(0, x0 - pad_x), max(0, y0 - pad_y)
+            x1, y1 = min(w, x1 + pad_x), min(h, y1 + pad_y)
+            side = max(x1 - x0, y1 - y0)
+            cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+            half = side // 2 + 1
+            nx0, ny0 = max(0, cx - half), max(0, cy - half)
+            nx1, ny1 = min(w, cx + half), min(h, cy + half)
+            im.crop((nx0, ny0, nx1, ny1)).save(path, "PNG")
+    except Exception:
+        log.exception("не удалось обрезать прозрачные поля у иконки %s", path)
+
+
 def _discover_windows(icon_cache: str | None) -> list[dict]:
     data, stderr, code = raw_windows_entries(icon_cache)
     if not data:
@@ -350,7 +385,10 @@ def _discover_windows(icon_cache: str | None) -> list[dict]:
             continue
         src = (x.get("src") if x.get("src") in ("startmenu", "registry", "store", "localapps")
                else "registry")
-        apps.append({"name": name, "path": path, "icon": x.get("icon"),
+        icon = x.get("icon")
+        if src == "store" and icon:
+            trim_transparent_padding(icon)
+        apps.append({"name": name, "path": path, "icon": icon,
                      "icon_fit": "contain", "source": src,
                      "sub": "Microsoft Store" if src == "store" else ""})
     return apps
