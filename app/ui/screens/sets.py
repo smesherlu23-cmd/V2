@@ -43,7 +43,7 @@ def _set_header(ui, rec):
                             lambda: ui.set_ops.capture_set_layout(rec["id"]), ft.Icons.SAVE,
                             height=38),
              Wg.primary_btn("Запустить набор", lambda: ui.set_ops.launch_set(rec["id"]),
-                           ui._accent(), ui.calm(), ft.Icons.PLAY_ARROW, height=38)]
+                           ui._accent(), ft.Icons.PLAY_ARROW, height=38)]
     return ft.Row([
         Wg.set_slot(46, 13, 22),
         ft.Column([ft.Container(name, height=28),
@@ -59,9 +59,7 @@ def _meta_divider():
 
 def _layout_column(ui, rec):
     head = ft.Row([_caps("РАСКЛАДКА"),
-                   ft.Container(height=1, bgcolor=C.LINE_2, expand=True),
-                   T("" if ui.calm() else "потяните края, чтобы изменить", size=11,
-                     color=C.MUTED_2)],
+                   ft.Container(height=1, bgcolor=C.LINE_2, expand=True)],
                   spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER)
     panel = ft.Container(
         ft.Column([_canvas(ui, rec), _layout_note(ui, rec)], spacing=10, tight=True),
@@ -204,8 +202,7 @@ def _order_column(ui, rec):
 
     settings = [
         ft.Container(height=1, bgcolor=C.LINE_2, margin=ft.margin.only(top=4)),
-        _set_option(ui, "Пауза между запусками",
-                    "тяжёлые программы успевают открыться",
+        _set_option("Пауза между запусками",
                     ft.Container(T(f"{rec['delay_seconds']:g} с", size=11.5, color=C.TEXT,
                                    font_family="monospace"),
                                  height=30, padding=ft.padding.symmetric(0, 10),
@@ -213,8 +210,7 @@ def _order_column(ui, rec):
                                  border_radius=8, alignment=ft.alignment.center,
                                  tooltip="Другая пауза",
                                  on_click=lambda e: ui.context_menus.delay_menu(rec, e))),
-        _set_option(ui, "Закрывать набор целиком",
-                    "в меню набора появится «Закрыть набор»",
+        _set_option("Закрывать набор целиком",
                     Wg.toggle(rec["close_together"],
                              lambda v: ui.set_ops.set_close_together(rec["id"], v), ui._accent())),
     ]
@@ -224,10 +220,8 @@ def _order_column(ui, rec):
         width=C.SET_SIDE_W)
 
 
-def _set_option(ui, title, sub, control):
+def _set_option(title, control):
     left = [T(title, size=12.5, color=C.TEXT_2)]
-    if sub and not ui.calm():
-        left.append(T(sub, size=10.5, color=C.MUTED_2))
     return ft.Row([ft.Column(left, spacing=1, tight=True, expand=True), control],
                   spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 

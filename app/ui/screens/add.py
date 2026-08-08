@@ -223,8 +223,6 @@ def _add_group(ui, group):
     head = [ft.Icon(box, size=18, color=box_color),
             ft.Icon(cat_icon(group["icon"]), size=16, color=C.MUTED_2),
             T(group["label"], size=12.5, weight=ft.FontWeight.W_600, color=C.TEXT)]
-    if not ui.calm():
-        head.append(T(f"{group['total']} · новых {group['new']}", size=11, color=C.MUTED_2))
     head.append(ft.Container(height=1, bgcolor=C.LINE_2, expand=True))
 
     rows = [ft.Container(ft.Row(head, spacing=10,
@@ -289,14 +287,8 @@ def _add_footer(ui):
     count = len(ui.view.add_sel)
     left = [T(f"Выбрано {count}" if count else "Ничего не выбрано", size=13,
               weight=ft.FontWeight.W_600, color=C.TEXT)]
-    if not ui.calm():
-        left.append(T("Категория предложена по источнику — поменяйте в строке",
-                      size=12, color=C.MUTED_2))
     add_label = f"Добавить {count}" if count else "Добавить"
     add_row = [T(add_label, size=13, weight=ft.FontWeight.W_600, color=C.ON_ACCENT)]
-    if not ui.calm():
-        add_row.append(T("Ctrl+Enter", size=10.5, color=C.ON_ACCENT, opacity=0.55,
-                         font_family="monospace"))
     return ft.Container(
         ft.Row(left + [
             ft.Container(expand=True),

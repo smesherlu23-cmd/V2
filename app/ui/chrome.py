@@ -4,7 +4,6 @@ import flet as ft
 
 from .. import __version__
 from ..core import queries
-from ..core.text import plu_hits
 from ..infra import log
 from . import colors as C
 from . import widgets as Wg
@@ -17,8 +16,7 @@ class Chrome:
     def __init__(self, ui):
         self.ui = ui
 
-    def sync_search_box(self, matches: int = 0):
-        from ..core.hotkeys import format_accel
+    def sync_search_box(self):
         active = self.ui.view.palette_open
         room = self.ui._window_width() - HEADER_SIDES_W
         self.ui.search_box.width = max(C.SEARCH_MIN_W, min(C.SEARCH_W, room))
@@ -27,19 +25,13 @@ class Chrome:
             1, C.FIELD_ACTIVE_BORDER if active else C.CONTROL)
         self.ui.search_icon.color = C.TEXT_2 if active else C.MUTED_2
         if active:
-            tail = []
-            if self.ui.view.query.strip() and not self.ui.calm():
-                tail.append(T(f"{matches} {plu_hits(matches)}", size=11, color=C.MUTED_2))
-            tail.append(ft.Container(ft.Icon(ft.Icons.CLOSE, size=15, color=C.MUTED_2),
-                                     tooltip="Закрыть поиск",
-                                     on_click=lambda e: self.ui._close_palette()))
+            tail = [ft.Container(ft.Icon(ft.Icons.CLOSE, size=15, color=C.MUTED_2),
+                                 tooltip="Закрыть поиск",
+                                 on_click=lambda e: self.ui._close_palette())]
             self.ui.search_tail.content = ft.Row(tail, spacing=10, tight=True,
                                               vertical_alignment=ft.CrossAxisAlignment.CENTER)
-        elif self.ui.calm():
-            self.ui.search_tail.content = None
         else:
-            self.ui.search_tail.content = Wg.key_chip(
-                format_accel(self.ui.setting("launch_hotkey")), self.ui._accent())
+            self.ui.search_tail.content = None
 
     def build_header(self):
         logo = ft.WindowDragArea(
@@ -219,15 +211,13 @@ class Chrome:
             border=ft.border.only(right=ft.BorderSide(1, C.LINE_2)), expand=True,
         )
 
-    def _sidebar_filter(self, icon_ctl, label, count, key, count_color=None):
+    def _sidebar_filter(self, icon_ctl, label, key):
         active = self.ui.view.filter == key and self.ui.view.screen == "grid" and not self.ui.view.active_set
         row = ft.Container(
             ft.Row([
                 ft.Container(icon_ctl, width=16, height=16, alignment=ft.alignment.center),
                 T(label, size=13, color=C.TEXT if active else C.TEXT_2,
                   weight=ft.FontWeight.W_600 if active else ft.FontWeight.W_400, expand=True),
-                T("" if self.ui.calm() else str(count), size=11,
-                  color=count_color or C.MUTED_2, font_family="monospace"),
             ], spacing=11),
             padding=ft.padding.symmetric(7, 10), border_radius=9,
             bgcolor=C.SET_SLOT_BG if active else None,
@@ -240,35 +230,24 @@ class Chrome:
 
     def build_sidebar(self):
         apps = self.ui.apps()
-        shown = queries.visible(apps)
-        fav = sum(1 for a in shown if a.get("favorite"))
-        recent_count = sum(1 for a in shown if a.get("last_launched"))
         buried = sum(1 for a in apps if a.get("hidden"))
 
         top = [ft.Container(T(self.ui._current_title(), size=18, weight=ft.FontWeight.BOLD,
                               color=C.TEXT, max_lines=1,
                               overflow=ft.TextOverflow.ELLIPSIS),
                             padding=ft.padding.only(8, 0, 8, 0))]
-        if not self.ui.calm():
-            total = len(self.ui.visible_apps())
-            subtitle = (f"{total} · выбрано {len(self.ui.view.sel)}"
-                        if self.ui.view.select_mode else str(total))
-            top.append(ft.Container(T(subtitle, size=11.5, color=C.MUTED_2, no_wrap=True,
-                                      overflow=ft.TextOverflow.ELLIPSIS),
-                                    padding=ft.padding.only(8, 4, 8, 0)))
         top += [
             ft.Container(height=1, bgcolor=C.LINE_2, margin=ft.margin.symmetric(10, 0)),
             self._sidebar_filter(ft.Icon(ft.Icons.STAR, size=16, color=C.STAR),
-                                 "Избранное", fav, "favorites"),
+                                 "Избранное", "favorites"),
             self._sidebar_filter(ft.Icon(ft.Icons.SCHEDULE, size=16, color=C.MUTED),
-                                 "Недавние", recent_count, "recent"),
-            self._sidebar_filter(Wg.dot(8), "Запущено", len(self.ui.running), "running",
-                                 C.GREEN),
+                                 "Недавние", "recent"),
+            self._sidebar_filter(Wg.dot(8), "Запущено", "running"),
         ]
         if buried:
             top.append(self._sidebar_filter(
                 ft.Icon(ft.Icons.VISIBILITY_OFF, size=16, color=C.MUTED),
-                "Скрытые", buried, "hidden"))
+                "Скрытые", "hidden"))
 
         top += [ft.Container(height=1, bgcolor=C.LINE_2, margin=ft.margin.symmetric(10, 0)),
                 ft.Container(ft.Row([Wg.caps("НАБОРЫ"), ft.Container(expand=True),
@@ -304,9 +283,6 @@ class Chrome:
         lines = [T(rec["name"], size=12.5, weight=ft.FontWeight.W_500,
                    color=C.TEXT if active else C.TEXT_2, max_lines=1,
                    overflow=ft.TextOverflow.ELLIPSIS)]
-        if not (self.ui.calm() or self.ui.view.select_mode):
-            lines.append(T(queries.set_summary(rec), size=10.5, color=C.MUTED_2,
-                           max_lines=1, overflow=ft.TextOverflow.ELLIPSIS))
         row = ft.Container(
             ft.Row([ft.Container(ft.Icon(ft.Icons.LAYERS, size=16,
                                          color=C.TEXT_2 if active else C.MUTED),
@@ -384,10 +360,8 @@ class Chrome:
             self.ui.set_ops.make_set(ids)
 
     def _sidebar_footer(self):
-        left = T("" if self.ui.calm() or not self.ui.running
-                 else f"{len(self.ui.running)} запущено", size=11, color=C.MUTED_3)
         return ft.Container(
-            ft.Row([left,
+            ft.Row([ft.Container(),
                     T(f"v{__version__}", size=11, color=C.MUTED_3, font_family="monospace")],
                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             border=ft.border.only(top=ft.BorderSide(1, C.LINE_2)),
@@ -430,11 +404,8 @@ class Chrome:
             border=ft.border.all(1, C.CONTROL), border_radius=9,
             clip_behavior=ft.ClipBehavior.HARD_EDGE,
         )
-        right = (T("Клик — отметить · Ctrl+A — всё · правая кнопка — до этой",
-                   size=11.5, color=C.MUTED_2)
-                 if self.ui.view.select_mode and not self.ui.calm() else
-                 Wg.primary_btn("Добавить", self.ui.open_add, self.ui._accent(), self.ui.calm(),
-                               ft.Icons.ADD, height=34))
+        right = Wg.primary_btn("Добавить", self.ui.open_add, self.ui._accent(),
+                               ft.Icons.ADD, height=34)
         return ft.Container(
             ft.Row(left + [sort_btn, view_toggle, ft.Container(expand=True), right],
                    spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),

@@ -121,10 +121,7 @@ def build_category_popover(ui, cat):
         ft.Row([ft.Container(
             ft.Row([ft.Icon(ft.Icons.DELETE_OUTLINE, size=15, color=C.ERR_TEXT),
                     T("Удалить категорию", size=12, color=C.ERR_TEXT)], spacing=6, tight=True),
-            on_click=lambda e: ui._remove_category(cat["id"])),
-            ft.Container(expand=True),
-            T("" if ui.calm() else "Esc", size=10.5, color=C.MUTED_3,
-              font_family="monospace")],
+            on_click=lambda e: ui._remove_category(cat["id"]))],
             vertical_alignment=ft.CrossAxisAlignment.CENTER),
         padding=ft.padding.only(0, 14, 0, 0), margin=ft.margin.only(top=12),
         border=ft.border.only(top=ft.BorderSide(1, C.LINE_2)))

@@ -28,9 +28,7 @@ def build_bulk_bar(ui):
                             margin=ft.margin.symmetric(0, 4))
 
     cancel = ft.Container(
-        ft.Row([T("Отмена", size=12.5, weight=ft.FontWeight.W_500, color=C.MUTED),
-                T("" if ui.calm() else "Esc", size=10.5, color=C.MUTED_2,
-                  font_family="monospace")], spacing=7, tight=True),
+        T("Отмена", size=12.5, weight=ft.FontWeight.W_500, color=C.MUTED),
         height=36, padding=ft.padding.symmetric(0, 12), border_radius=9,
         alignment=ft.alignment.center, on_click=lambda e: ui.toggle_select_mode())
     Wg.hoverable(cancel, None, C.BAR_BTN)

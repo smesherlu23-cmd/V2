@@ -86,11 +86,8 @@ def _settings_view(ui):
         _group("ПЛОТНОСТЬ", _tile_segments(ui)),
         _group("ПОЛОСА КАТЕГОРИЙ", _rail_segments(ui)),
         ft.Container(height=1, bgcolor=C.LINE_2),
-        _switch(ui, "Показывать «Быстрый запуск»", "Лента закреплённых сверху библиотеки",
-                "show_quick_row"),
-        _switch(ui, "Постеры для игр", "Вертикальные обложки вместо иконок", "game_posters"),
-        _switch(ui, "Спокойный вид", "Скрыть необязательные подсказки и часть счётчиков",
-                "calm"),
+        _switch(ui, "Показывать «Быстрый запуск»", "show_quick_row"),
+        _switch(ui, "Постеры для игр", "game_posters"),
     ]
 
 
@@ -111,9 +108,7 @@ def _launch_hotkey_field(ui):
 
 def _settings_keys(ui):
     return [
-        _row(ui, "Вызов Centurio", "Поднимает библиотеку из любой программы",
-             _launch_hotkey_field(ui)),
-        _switch(ui, "Подсказки клавиш", "Строка снизу в палитре поиска", "hints"),
+        _row("Вызов Centurio", _launch_hotkey_field(ui)),
         ft.Container(height=1, bgcolor=C.LINE_2),
         _settings_note("Своя комбинация для отдельной программы задаётся в панели "
                        "справа от неё, а Ctrl+1…9 раздаются закреплённым в "
@@ -124,11 +119,9 @@ def _settings_keys(ui):
 
 def _settings_startup(ui):
     return [
-        _switch(ui, "Запускать с Windows", "Свёрнутым в трей", "autostart"),
-        _switch(ui, "Крестик сворачивает в трей", "Иначе Centurio завершается",
-                "close_to_tray"),
-        _switch(ui, "Прятать окно после запуска", "Нашёл в поиске — запустил — окно ушло",
-                "hide_after"),
+        _switch(ui, "Запускать с Windows", "autostart"),
+        _switch(ui, "Крестик сворачивает в трей", "close_to_tray"),
+        _switch(ui, "Прятать окно после запуска", "hide_after"),
     ]
 
 
@@ -136,20 +129,17 @@ def _settings_library(ui):
     size = ui.icon_cache_size()
     cache_label = f"{size / (1024 * 1024):.0f} МБ" if size else "пусто"
     return [
-        _switch(ui, "Складывать новое в разбор",
-                "Иначе новые программы не появляются сами", "triage"),
-        _switch(ui, "Проверять новое раз в 15 минут", "Тихо, в фоне", "auto_rescan"),
+        _switch(ui, "Складывать новое в разбор", "triage"),
+        _switch(ui, "Проверять новое раз в 15 минут", "auto_rescan"),
         ft.Container(height=1, bgcolor=C.LINE_2),
-        _row(ui, "Кэш иконок", "Картинки, вытащенные из программ",
+        _row("Кэш иконок",
              ft.Row([T(cache_label, size=11, color=C.MUTED_2, font_family="monospace"),
                      Wg.link_btn("Очистить", ui.clear_icon_cache)], spacing=10, tight=True)),
-        _row(ui, "Копия библиотеки", "Рядом с файлом данных",
+        _row("Копия библиотеки",
              Wg.outline_btn("Сохранить", ui.backup, ft.Icons.BACKUP, height=32)),
-        _row(ui, "Файл библиотеки", str(ui.store.path),
-             Wg.link_btn("Показать в папке", ui.show_data_folder)),
+        _row("Файл библиотеки", Wg.link_btn("Показать в папке", ui.show_data_folder)),
         ft.Container(height=1, bgcolor=C.LINE_2),
-        _switch(ui, "Подробный лог", "Для отчёта о проблеме — нужен перезапуск",
-                "debug_log"),
+        _switch(ui, "Подробный лог", "debug_log"),
     ]
 
 
@@ -160,19 +150,16 @@ def _settings_note(text):
         border=ft.border.all(1, C.LINE_2))
 
 
-def _row(ui, title, sub, control, on_click=None):
-    left = [T(title, size=13, color=C.TEXT_2)]
-    if sub and not ui.calm():
-        left.append(T(sub, size=11, color=C.TEXT_DIM))
+def _row(title, control, on_click=None):
     return ft.Container(
-        ft.Row([ft.Column(left, spacing=2, tight=True, expand=True), control],
+        ft.Row([T(title, size=13, color=C.TEXT_2, expand=True), control],
                spacing=14, vertical_alignment=ft.CrossAxisAlignment.CENTER),
         on_click=(lambda e: on_click()) if on_click else None)
 
 
-def _switch(ui, title, sub, key):
+def _switch(ui, title, key):
     value = bool(ui.setting(key))
-    return _row(ui, title, sub,
+    return _row(title,
                 Wg.toggle(value, lambda v, k=key: ui.set_setting(k, v), ui._accent()),
                 on_click=lambda k=key, v=value: ui.set_setting(k, not v))
 

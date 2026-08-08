@@ -41,8 +41,6 @@ DEFAULT_SETTINGS = {
     "launch_hotkey": DEFAULT_LAUNCH_HOTKEY,
     "hide_after": True,
     "triage": True,
-    "calm": True,
-    "hints": True,
     "debug_log": False,
     "collapsed": [],
     "ui_defaults_version": 0,
@@ -223,7 +221,7 @@ def clean_records(raw, clean) -> list[dict]:
 _BOOL_SETTINGS = {
     "autostart", "minimize_to_tray", "close_to_tray", "show_quick_row",
     "game_posters", "auto_rescan", "win_max", "hide_after", "triage",
-    "calm", "hints", "debug_log",
+    "debug_log",
 }
 
 _STR_SETTINGS = {"accent", "tile_size", "rail_size", "view_filter", "view_sort",
@@ -255,6 +253,5 @@ def clean_settings(raw) -> dict:
             if key in raw:
                 settings[key] = _clean_setting_value(key, raw[key], default)
     if settings["ui_defaults_version"] < UI_DEFAULTS_VERSION:
-        settings["calm"] = True
         settings["ui_defaults_version"] = UI_DEFAULTS_VERSION
     return settings

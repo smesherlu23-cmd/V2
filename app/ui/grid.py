@@ -3,8 +3,7 @@ from __future__ import annotations
 import flet as ft
 
 from ..core import queries
-from ..core.hotkeys import format_accel, free_quick_slot, split_accel
-from ..core.text import short_ago
+from ..core.hotkeys import format_accel, free_quick_slot
 from . import colors as C
 from . import screens
 from . import widgets as Wg
@@ -12,11 +11,6 @@ from .format import T
 from .images import img_b64, is_launcher_art
 
 QUICK_H = 88
-
-
-def quick_slot_label(accel: str) -> str:
-    mods, key = split_accel(accel)
-    return key.upper() if mods == {"ctrl"} and key.isdigit() else format_accel(accel)
 
 
 class GridView:
@@ -142,7 +136,7 @@ class GridView:
             cards.append(self._cached_piece(("qempty",), free,
                                              lambda f=free: self._quick_empty(f)))
 
-        head = self._cached_piece(("qhead",), self.ui.calm(), self._build_quick_head)
+        head = self._cached_piece(("qhead",), True, self._build_quick_head)
 
         self._used.add(("qrow",))
         holder = self._section_holders.get(("qrow",))
@@ -156,8 +150,6 @@ class GridView:
 
     def _build_quick_head(self):
         head_row = [T("Быстрый запуск", size=14.5, weight=ft.FontWeight.BOLD, color=C.TEXT)]
-        if not self.ui.calm():
-            head_row.append(T("Ctrl+1…9", size=11, color=C.MUTED_2, font_family="monospace"))
         return ft.Container(ft.Row(head_row, spacing=10), padding=ft.padding.only(0, 8, 0, 12))
 
     def _fits_in_row(self, count: int) -> bool:
@@ -172,10 +164,6 @@ class GridView:
             T(app["name"], size=12.5, weight=ft.FontWeight.W_600, color=C.TEXT,
               max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
         ], spacing=0, tight=True)]
-        if accel and not self.ui.calm():
-            layers.append(ft.Container(
-                T(quick_slot_label(accel), size=10.5, weight=ft.FontWeight.W_600,
-                  color=C.TEXT_FAINT, font_family="monospace"), right=9, top=9))
         card = ft.Container(
             ft.Stack(layers), width=C.QUICK_W, height=QUICK_H, bgcolor=C.PANEL,
             border=ft.border.all(1, C.CONTROL), border_radius=12,
@@ -187,7 +175,6 @@ class GridView:
                                   on_secondary_tap_down=lambda e, ap=app: self.ui.context_menus.app_menu(ap, e))
 
     def _set_card(self, rec):
-        accel = self.ui._set_accels.get(rec["id"])
         card = ft.Container(
             ft.Column([
                 Wg.set_slot(38, 11, 19, muted=True),
@@ -198,7 +185,7 @@ class GridView:
             width=C.QUICK_W, height=QUICK_H, bgcolor=C.SET_BG,
             border=ft.border.all(1, C.DASHED), border_radius=12,
             padding=ft.padding.all(12),
-            tooltip=f"{rec['name']} · {accel}" if accel and not self.ui.calm() else rec["name"],
+            tooltip=rec["name"],
             on_click=lambda e, sid=rec["id"]: self.ui.set_ops.launch_set(sid))
         Wg.hoverable(card, C.SET_BG, C.PANEL)
         return ft.GestureDetector(card,
@@ -215,22 +202,16 @@ class GridView:
     def _section_head(self, sec, key):
         cat = next((c for c in self.ui.categories() if c["id"] == sec.get("cid")), None)
         collapsed = bool(sec.get("cid")) and sec["cid"] in self.ui.view.collapsed
-        total = len(sec["apps"])
-        picked = sum(1 for a in sec["apps"] if a["id"] in self.ui.view.sel)
-        sig = (sec["name"], collapsed, self.ui.calm(), self.ui.view.select_mode,
-               total, picked,
+        sig = (sec["name"], collapsed, self.ui.view.select_mode,
                (cat.get("name"), cat.get("icon"), cat.get("color")) if cat else None)
         return self._cached_piece(
             ("head", key), sig,
-            lambda: self._build_section_head(sec, cat, collapsed, total, picked))
+            lambda: self._build_section_head(sec, cat, collapsed))
 
-    def _build_section_head(self, sec, cat, collapsed, total, picked):
+    def _build_section_head(self, sec, cat, collapsed):
         row = [Wg.cat_glyph(cat, size=14) if cat
                else ft.Container(width=8, height=8, border_radius=4, bgcolor=C.DOT),
                T(sec["name"], size=14.5, weight=ft.FontWeight.BOLD, color=C.TEXT)]
-        if not self.ui.calm():
-            label = f"{total} · выбрано {picked}" if self.ui.view.select_mode else str(total)
-            row.append(T(label, size=11, color=C.MUTED_2))
         row.append(ft.Container(height=1, bgcolor=C.LINE_2, expand=True))
         if sec.get("cid") and not self.ui.view.select_mode:
             row.append(ft.Container(
@@ -325,20 +306,10 @@ class GridView:
             return
         self.ui._reorder_apps(section_ids, list(payload["ids"]), target_id)
 
-    def _tile_meta(self, app, cat) -> str:
+    def _tile_meta(self, app) -> str:
         if self.ui.view.select_mode:
-            return "" if self.ui.calm() else (cat["name"] if cat else "")
-        accel = self.ui._accels.get(app["id"])
-        if accel:
-            return accel
-        if self.ui.calm():
             return ""
-        ago = short_ago(app.get("last_launched"))
-        if ago:
-            return ago
-        if cat:
-            return cat["name"]
-        return (app.get("sub") or "").strip()
+        return self.ui._accels.get(app["id"]) or ""
 
     def _tile_marks(self, a, running):
         if self.ui.view.select_mode:
@@ -363,7 +334,6 @@ class GridView:
         width = C.TILE_W_COMPACT if compact else C.TILE_W
         cover_h = C.TILE_COVER_H_COMPACT if compact else C.TILE_COVER_H
         slot = C.TILE_SLOT_COMPACT if compact else C.TILE_SLOT
-        cat = self.ui.cat_of(a)
 
         gradient = C.TILE_GRADIENT_SEL if selected else C.TILE_GRADIENT
         cover_children = [ft.Container(
@@ -376,7 +346,7 @@ class GridView:
                                        colors=list(gradient)))]
         cover_children += self._tile_marks(a, running)
 
-        meta = self._tile_meta(a, cat)
+        meta = self._tile_meta(a)
         foot_lines = [T(a["name"], size=12.5, weight=ft.FontWeight.W_600, color=C.TEXT,
                         max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)]
         if meta:
@@ -472,7 +442,7 @@ class GridView:
             return hit[1]
         ids_box = {"ids": ids}
         lines = [T(a["name"], size=13, weight=ft.FontWeight.W_600, color=C.TEXT)]
-        meta = self._tile_meta(a, cat)
+        meta = self._tile_meta(a)
         if meta:
             lines.append(T(meta, size=11, color=C.MUTED_2,
                            font_family="monospace" if meta.startswith("Ctrl") else None))
@@ -517,8 +487,7 @@ class GridView:
         ]
         if btn_label:
             controls += [ft.Container(height=18),
-                         Wg.primary_btn(btn_label, on_click, self.ui._accent(), self.ui.calm(),
-                                       ft.Icons.ADD)]
+                         Wg.primary_btn(btn_label, on_click, self.ui._accent(), ft.Icons.ADD)]
         return ft.Container(
             ft.Column(controls, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0),
             alignment=ft.alignment.center, padding=ft.padding.only(0, 80, 0, 40))

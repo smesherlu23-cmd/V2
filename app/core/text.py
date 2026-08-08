@@ -50,10 +50,6 @@ def plu_apps(n):
     return _plural(n, "приложение", "приложения", "приложений")
 
 
-def plu_hits(n):
-    return _plural(n, "совпадение", "совпадения", "совпадений")
-
-
 def plu_programs(n):
     return _plural(n, "программа", "программы", "программ")
 

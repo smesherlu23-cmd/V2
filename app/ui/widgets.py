@@ -51,15 +51,11 @@ def toggle(value: bool, on_toggle, accent):
         animate=ft.Animation(C.ANIM_FAST, ft.AnimationCurve.EASE_OUT))
 
 
-def primary_btn(label, on_click, accent, calm, icon=None, height=36, expand=False,
-                hint: str = ""):
+def primary_btn(label, on_click, accent, icon=None, height=36, expand=False):
     row = [T(label, size=13 if height >= 38 else 12.5, weight=ft.FontWeight.W_600,
              color=C.ON_ACCENT)]
     if icon:
         row.insert(0, ft.Icon(icon, size=15, color=C.ON_ACCENT))
-    if hint and not calm:
-        row.append(T(hint, size=10.5, color=C.ON_ACCENT, opacity=0.55,
-                     font_family="monospace"))
     btn = ft.Container(
         ft.Row(row, spacing=7, tight=True, alignment=ft.MainAxisAlignment.CENTER),
         height=height, padding=ft.padding.symmetric(0, 14), bgcolor=accent,
