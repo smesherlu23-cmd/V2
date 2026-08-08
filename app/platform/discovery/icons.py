@@ -28,8 +28,9 @@ def resolve_icon_for(path: str, icon_cache: str | None = None) -> tuple[str | No
             icon, fit = steam_art._steam_icon(root, appid, icon_cache)
             if icon:
                 return icon, fit
-        dl = steam_art._steam_cdn_art(appid, icon_cache)
-        return (dl, "cover") if dl else (None, "contain")
+        # Обложка (capsule/header) — не иконка, поэтому здесь без CDN-фолбэка
+        # на неё: постер для этого приложения отдельно берёт poster_for().
+        return None, "contain"
     if path.lower().startswith("shell:appsfolder\\"):
         try:
             if os.name == "nt":

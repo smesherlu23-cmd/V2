@@ -1386,6 +1386,24 @@ def test_discovery():
         ok(discovery._steam_portrait(d, "999") is None, "steam portrait: missing -> None")
     ok(discovery.poster_for("C:/x/app.exe") is None, "poster_for: non-steam path -> None")
 
+    # icon vs poster: a wide capsule/header sitting in the library cache must
+    # never come back as the *icon* — it belongs to poster_for() alone, and
+    # icon_slot() would cover-crop it into an unrecognisable sliver.
+    with tempfile.TemporaryDirectory() as d:
+        lc = os.path.join(d, "appcache", "librarycache")
+        os.makedirs(lc)
+        with open(os.path.join(lc, "730_header.jpg"), "wb") as fh:
+            fh.write(b"\0" * 2048)
+        icon, fit = discovery.steam_art._steam_icon(d, "730")
+        ok(icon is None and fit == "contain",
+           "steam icon: capsule/header art alone does not count as an icon")
+
+        with open(os.path.join(lc, "730_icon.jpg"), "wb") as fh:
+            fh.write(b"\0" * 512)
+        icon, fit = discovery.steam_art._steam_icon(d, "730")
+        ok(icon == os.path.join(lc, "730_icon.jpg") and fit == "contain",
+           "steam icon: the real small square icon is what's used once it exists")
+
 
     deduped = discovery._dedupe([{"name": "CS2", "path": "steam://rungameid/730",
                                   "sub": "Steam", "source": "steam", "track_exe": "cs2.exe",
