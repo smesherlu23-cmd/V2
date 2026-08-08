@@ -22,20 +22,32 @@ SOURCE_ORDER = ("manual", "steam", "epic", "startmenu", "store", "registry", "lo
 _CATEGORY_HINTS = (
     ("dev", ("jetbrains", "pycharm", "intellij", "webstorm", "rider", "clion", "goland",
              "phpstorm", "datagrip", "android studio", "visual studio", "vscode",
-             "vs code", "sublime text", "notepad++", "git", "github", "docker",
+             "vs code", "sublime text", "notepad++", "git", "github", "gitlab", "docker",
              "postman", "insomnia", "dbeaver", "putty", "windows terminal", "cmder",
-             "sourcetree", "unity", "godot", "node.js", "python", "arduino")),
+             "sourcetree", "unity", "godot", "unreal editor", "node.js", "python",
+             "arduino", "xcode", "eclipse", "netbeans", "wireshark", "fiddler",
+             "kubernetes", "vmware", "virtualbox", "wsl", "powershell", "mysql workbench",
+             "sql server management", "azure data studio", "figma dev mode")),
     ("create", ("photoshop", "illustrator", "premiere", "after effects", "lightroom",
                 "indesign", "figma", "blender", "krita", "gimp", "inkscape", "affinity",
                 "davinci", "obs", "audacity", "reaper", "ableton", "fl studio",
                 "cubase", "capture one", "clip studio", "paint.net", "sketch",
-                "substance", "cinema 4d", "maya", "3ds max")),
+                "substance", "cinema 4d", "maya", "3ds max", "canva", "procreate",
+                "vegas pro", "camtasia", "streamlabs", "vmix", "nuke", "houdini",
+                "toon boom", "shotcut", "kdenlive", "corel painter", "coreldraw",
+                "xd", "webflow")),
     ("games", ("steam", "epic games", "gog galaxy", "battle.net", "ubisoft connect",
-               "origin", "ea app", "riot client", "roblox", "minecraft")),
+               "origin", "ea app", "riot client", "roblox", "minecraft", "playnite",
+               "amazon games", "xbox")),
+    ("work", ("outlook", "microsoft word", "winword", "excel", "powerpoint", "onenote",
+              "microsoft teams", "slack", "zoom", "skype", "notion", "trello", "asana",
+              "jira", "confluence", "miro", "todoist", "1c", "1с", "sap", "sharepoint",
+              "adobe acrobat", "acrobat reader", "google docs", "google sheets",
+              "yandex.disk", "mail.ru", "citrix workspace", "anydesk", "teamviewer")),
 )
 
-# The ids above ("games", "dev", "create") name a *kind* of category, not a
-# literal id — they only resolve straight through when the built-in
+# The ids above ("games", "dev", "create", "work") name a *kind* of category,
+# not a literal id — they only resolve straight through when the built-in
 # category with that id is still around. The moment someone deletes or
 # replaces the defaults, that id no longer exists in their library at all,
 # so matching stops there instead of guessing: falling back to the first
@@ -43,9 +55,12 @@ _CATEGORY_HINTS = (
 # This is the fallback for that case — guess which of the *user's own*
 # categories plays that role by name, in whatever language they called it.
 _CATEGORY_NAME_HINTS = {
-    "games": ("игр", "game", "геймин", "gaming"),
-    "dev": ("разработ", "код", "development", "coding", "programming"),
-    "create": ("творч", "дизайн", "creat", "design"),
+    "games": ("игр", "game", "гейм", "gaming", "gamer", "плей"),
+    "dev": ("разработ", "программир", "код", "development", "coding", "programming",
+            "software", "engineer", "инженер"),
+    "create": ("творч", "дизайн", "creat", "design", "монтаж", "рисован", "иллюстрац"),
+    "work": ("работ", "офис", "work", "office", "продуктивн", "productiv",
+             "бизнес", "business", "документ", "document"),
 }
 
 

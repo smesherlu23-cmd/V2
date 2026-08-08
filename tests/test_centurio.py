@@ -1985,6 +1985,11 @@ def test_queries():
        "and when nothing matches by id or name, it falls back to the first "
        "category in the list rather than staying stuck on the missing default")
 
+    outlook_item = {"name": "Outlook", "path": "C:/Program Files/Outlook.exe"}
+    ok(queries.suggest_category(outlook_item, [{"id": "aaa", "name": "Игры"},
+                                               {"id": "bbb", "name": "Офис"}]) == "bbb",
+       "office/productivity apps are recognised as a category kind too, not just games/dev/create")
+
 
 class _FakeWindow:
     def __init__(self):
