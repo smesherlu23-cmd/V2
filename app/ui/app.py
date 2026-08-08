@@ -910,7 +910,7 @@ class CenturioUI:
             log.exception("не удалось скопировать изображение категории")
             self.toast.error("Не удалось прочитать файл")
             return None
-        
+
         for stale in dest_dir.glob(f"{cat_id}.*"):
             if stale != dest:
                 try:
