@@ -22,8 +22,7 @@ def build_triage_screen(ui):
     head = ft.Container(
         ft.Row([ft.Column([
             T("Разбор", size=16, weight=ft.FontWeight.BOLD, color=C.TEXT),
-            T("" if ui.calm() else f"Осталось {total} · разобрано {done}",
-              size=12, color=C.TEXT_DIM),
+            T(f"Осталось {total} · разобрано {done}", size=12, color=C.TEXT_DIM),
         ], spacing=4, tight=True, expand=True),
             ft.Container(T("Отложить всё", size=12.5, color=C.MUTED_2),
                          on_click=lambda e: ui.triage.triage_defer_all())],
@@ -61,7 +60,7 @@ def build_triage_screen(ui):
         ft.Column([
             T(item["name"], size=22, weight=ft.FontWeight.BOLD, color=C.TEXT,
               text_align=ft.TextAlign.CENTER),
-            T("" if ui.calm() else source, size=12, color=C.TEXT_DIM),
+            T(source, size=12, color=C.TEXT_DIM),
         ], spacing=7, tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
         ft.Container(ft.Row(chips, spacing=9, wrap=True, run_spacing=9,
                             alignment=ft.MainAxisAlignment.CENTER),
@@ -82,8 +81,7 @@ def build_triage_screen(ui):
                              on_click=lambda e, iid=item["id"]: ui.triage.triage_drop(iid))],
                spacing=20, vertical_alignment=ft.CrossAxisAlignment.CENTER),
         height=52, bgcolor=C.BG_2, padding=ft.padding.symmetric(0, 26),
-        border=ft.border.only(top=ft.BorderSide(1, C.LINE_2)),
-        visible=not ui.calm())
+        border=ft.border.only(top=ft.BorderSide(1, C.LINE_2)))
 
     return ft.Column([head, bar,
                       ft.Container(card, expand=True, padding=ft.padding.symmetric(0, 26),

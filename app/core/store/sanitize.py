@@ -15,6 +15,10 @@ DEFAULT_LAUNCH_HOTKEY = "Ctrl+Space"
 DEFAULT_SET_DELAY = 2.0
 MAX_SET_DELAY = 30.0
 
+# Бампается, когда меняется дефолт для уже существующих пользователей (не
+# только для новых профилей) — см. миграцию в конце clean_settings.
+UI_DEFAULTS_VERSION = 1
+
 DEFAULT_SETTINGS = {
     "autostart": False,
     "minimize_to_tray": True,
@@ -37,10 +41,11 @@ DEFAULT_SETTINGS = {
     "launch_hotkey": DEFAULT_LAUNCH_HOTKEY,
     "hide_after": True,
     "triage": True,
-    "calm": False,
+    "calm": True,
     "hints": True,
     "debug_log": False,
     "collapsed": [],
+    "ui_defaults_version": 0,
 }
 
 
@@ -236,7 +241,7 @@ def _clean_setting_value(key: str, value, default):
         if value is None:
             return None
         return value if isinstance(value, int) and not isinstance(value, bool) else default
-    if key == "icon_schema":
+    if key in ("icon_schema", "ui_defaults_version"):
         return value if isinstance(value, int) and not isinstance(value, bool) else default
     if key == "collapsed":
         return [c for c in value if isinstance(c, str)] if isinstance(value, list) else default
@@ -249,4 +254,7 @@ def clean_settings(raw) -> dict:
         for key, default in DEFAULT_SETTINGS.items():
             if key in raw:
                 settings[key] = _clean_setting_value(key, raw[key], default)
+    if settings["ui_defaults_version"] < UI_DEFAULTS_VERSION:
+        settings["calm"] = True
+        settings["ui_defaults_version"] = UI_DEFAULTS_VERSION
     return settings
