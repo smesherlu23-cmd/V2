@@ -30,14 +30,6 @@ def build_palette(ui, rows):
             ft.Column([_palette_action_row(ui, a, i) for i, a in enumerate(actions)],
                       spacing=1, tight=True),
             padding=ft.padding.only(8, 0, 8, 10)))
-    if ui.setting("hints", True) and not ui.calm():
-        children.append(ft.Container(
-            ft.Row([T("↑↓ выбрать · Enter запустить · Tab к действиям", size=11,
-                      color=C.TEXT_FAINT, expand=True),
-                    T("Esc — к библиотеке", size=11, color=C.TEXT_FAINT)]),
-            padding=ft.padding.symmetric(9, 16), bgcolor=C.PALETTE_FOOT,
-            border=ft.border.only(top=ft.BorderSide(1, C.PALETTE_FOOT_BORDER))))
-
     return ft.Container(
         ft.Column(children, spacing=0, tight=True),
         width=C.PALETTE_W, bgcolor=C.PALETTE_BG,
@@ -76,10 +68,7 @@ def _palette_app_row(ui, row):
     app = row["app"]
     active = (ui.view.palette_index == row["index"]
               and ui.view.palette_focus == "results")
-    accel = ui._accels.get(app["id"])
-    right = (Wg.key_chip("Enter", ui._accent(), bright=True) if active
-             else (T(accel, size=11, color=C.TEXT_FAINT, font_family="monospace")
-                   if accel and not ui.calm() else None))
+    right = Wg.key_chip("Enter", ui._accent(), bright=True) if active else None
     sub = queries.app_palette_sub(row, ui.window_count(app))
     lines = [T(spans=[
         ft.TextSpan(text, ft.TextStyle(bgcolor=C.MATCH_BG) if hit else None)
@@ -100,10 +89,7 @@ def _palette_set_row(ui, row):
     rec = row["set"]
     active = (ui.view.palette_index == row["index"]
               and ui.view.palette_focus == "results")
-    accel = ui._set_accels.get(rec["id"])
-    right = (Wg.key_chip("Enter", ui._accent(), bright=True) if active
-             else (T(accel, size=11, color=C.TEXT_FAINT, font_family="monospace")
-                   if accel and not ui.calm() else None))
+    right = Wg.key_chip("Enter", ui._accent(), bright=True) if active else None
     lines = [T(rec["name"], size=14, weight=ft.FontWeight.W_500,
                color=C.WHITE if active else C.TEXT, max_lines=1,
                overflow=ft.TextOverflow.ELLIPSIS)]
@@ -120,9 +106,6 @@ def _palette_action_row(ui, action, index):
                              width=32, alignment=ft.alignment.center),
                 T(action["label"], size=13.5, color=C.WHITE if active else C.TEXT_2,
                   expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)]
-    if action["hint"] and not ui.calm():
-        controls.append(T(action["hint"], size=11, color=C.TEXT_FAINT,
-                          font_family="monospace"))
     row = ft.Container(
         ft.Row(controls, spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER),
         height=40, padding=ft.padding.symmetric(0, 12), border_radius=10,

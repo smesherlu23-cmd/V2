@@ -42,8 +42,7 @@ class ContextMenus:
             menus.item(ft.Icons.SELECT_ALL, "Выбрать до этой",
                        lambda: self.ui._range_to(app["id"]),
                        disabled=not anchor or anchor == app["id"]),
-            menus.item(ft.Icons.DONE_ALL, "Выбрать всё", self.ui._select_all_visible,
-                       hint="" if self.ui.calm() else "Ctrl+A"),
+            menus.item(ft.Icons.DONE_ALL, "Выбрать всё", self.ui._select_all_visible),
         ]
         if ids:
             rows += [
@@ -64,8 +63,7 @@ class ContextMenus:
                            lambda: self.ui._remove_apps(ids), danger=True),
             ]
         rows += [menus.separator(),
-                 menus.item(ft.Icons.CLOSE, "Выйти из режима", self.ui.toggle_select_mode,
-                            hint="" if self.ui.calm() else "Esc")]
+                 menus.item(ft.Icons.CLOSE, "Выйти из режима", self.ui.toggle_select_mode)]
         header = (menus.text_header(f"Выбрано {len(ids)}") if ids
                   else menus.app_header(self.ui, app, app["id"] in self.ui.running))
         self.ui.menu.show(x, y, rows, header=header)
@@ -112,11 +110,9 @@ class ContextMenus:
 
     def set_menu(self, rec, e):
         x, y = self.menu_at(e)
-        accel = self.ui._set_accels.get(rec["id"])
         rows = [
             menus.item(ft.Icons.PLAY_ARROW, "Запустить набор",
-                       lambda: self.ui.set_ops.launch_set(rec["id"]),
-                       hint="" if self.ui.calm() else (accel or "")),
+                       lambda: self.ui.set_ops.launch_set(rec["id"])),
         ]
         if rec.get("close_together"):
             rows.append(menus.item(ft.Icons.CLOSE, "Закрыть набор",

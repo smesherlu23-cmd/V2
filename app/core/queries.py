@@ -171,12 +171,6 @@ def has_layout(rec: dict) -> bool:
     return any(i.get("slot") is not None or i.get("rect") for i in rec.get("items", []))
 
 
-def set_summary(rec: dict) -> str:
-    count = len(rec.get("items", []))
-    text = f"{count} {plu_programs(count)}"
-    return f"{text} · раскладка" if has_layout(rec) else text
-
-
 def set_palette_sub(rec: dict, members: list[str]) -> str:
     count = len(members)
     text = f"{count} {plu_programs(count)}"
@@ -196,10 +190,9 @@ def app_palette_sub(row: dict, windows: int = 0) -> str:
     return " · ".join(parts)
 
 PALETTE_ACTIONS = (
-    {"key": "folder", "icon": "folder_open", "label": "Открыть папку программы", "hint": ""},
-    {"key": "admin", "icon": "shield", "label": "Запустить от имени администратора",
-     "hint": "Ctrl+Enter"},
-    {"key": "set", "icon": "playlist_add", "label": "Добавить в набор…", "hint": ""},
+    {"key": "folder", "icon": "folder_open", "label": "Открыть папку программы"},
+    {"key": "admin", "icon": "shield", "label": "Запустить от имени администратора"},
+    {"key": "set", "icon": "playlist_add", "label": "Добавить в набор…"},
 )
 
 

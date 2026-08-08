@@ -55,7 +55,7 @@ class InspectorPanel:
         actions = ft.Container(
             ft.Row([
                 Wg.primary_btn("Переключиться" if running else "Запустить",
-                              lambda: self.ui._launch(app["id"]), self.ui._accent(), self.ui.calm(),
+                              lambda: self.ui._launch(app["id"]), self.ui._accent(),
                               ft.Icons.SYNC_ALT if running else ft.Icons.PLAY_ARROW,
                               height=36, expand=True),
                 square(ft.Icons.STAR if app.get("favorite") else ft.Icons.STAR_BORDER,
@@ -73,10 +73,8 @@ class InspectorPanel:
                            Wg.toggle(bool(app.get("quick")),
                                     lambda v: self.ui._toggle_quick(app["id"], v),
                                     self.ui._accent()),
-                           sub=self._quick_sub(app), always=True),
-            self._insp_row("Своя горячая клавиша", self._hotkey_field(app),
-                           sub="Нажмите комбинацию" if self.ui.view.capture
-                           else "Работает из любого окна"),
+                           sub=self._quick_sub(app)),
+            self._insp_row("Своя горячая клавиша", self._hotkey_field(app)),
             self._insp_row("В наборах", self._set_chips(app)),
         ]
         props.append(ft.Container(height=1, bgcolor=C.LINE_2))
@@ -85,8 +83,7 @@ class InspectorPanel:
                                  padding=ft.padding.only(18, 18, 18, 0))
 
         footer = ft.Container(
-            ft.Row([T("" if self.ui.calm() else "сохраняется само", size=10.5,
-                      color=C.MUTED_3, expand=True),
+            ft.Row([ft.Container(expand=True),
                     Wg.outline_btn("Убрать", lambda: self.ui._remove_apps([app["id"]]),
                                      ft.Icons.DELETE_OUTLINE, danger=True, height=30)],
                    vertical_alignment=ft.CrossAxisAlignment.CENTER),
@@ -101,9 +98,9 @@ class InspectorPanel:
                        footer], spacing=0, expand=True),
             border=ft.border.only(left=ft.BorderSide(1, C.LINE_2)), expand=True)
 
-    def _insp_row(self, label, control, sub=None, always=False):
+    def _insp_row(self, label, control, sub=None):
         left = [T(label, size=12.5, color=C.TEXT_2)]
-        if sub and (always or not self.ui.calm()):
+        if sub:
             left.append(T(sub, size=11, color=C.MUTED_2))
         return ft.Row([ft.Column(left, spacing=1, tight=True, expand=True), control],
                       spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER)
@@ -247,6 +244,5 @@ class InspectorPanel:
             self._insp_row("От администратора",
                            Wg.toggle(bool(app.get("run_as_admin")),
                                     lambda v: self.ui._set_admin(app["id"], v),
-                                    self.ui._accent()),
-                           sub="Будет запрос UAC"),
+                                    self.ui._accent())),
         ], spacing=9), padding=ft.padding.only(18, 18, 18, 0))

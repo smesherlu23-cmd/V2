@@ -52,7 +52,6 @@ class CenturioUI:
         self._win_lock = threading.Lock()
         self._win_snapshot: list[dict] = []
         self._win_at = 0.0
-        self._palette_count = 0
         self._tile_cache: OrderedDict[str, tuple] = OrderedDict()
         self._tiles_used: set[str] = set()
         self._tile_epoch: tuple = ()
@@ -155,9 +154,6 @@ class CenturioUI:
     def setting(self, key, default=None):
         return self._settings.get(key, default)
 
-    def calm(self) -> bool:
-        return bool(self._settings.get("calm"))
-
     def _accent(self):
         return self._settings.get("accent", C.ACCENT)
 
@@ -258,7 +254,6 @@ class CenturioUI:
             self._cat_index = {c["id"]: c for c in self._snapshot["categories"]}
             self._tile_epoch = (
                 self._settings.get("tile_size"),
-                bool(self._settings.get("calm")),
                 self._settings.get("accent", C.ACCENT),
                 bool(self._settings.get("game_posters", True)),
                 self._settings.get("rail_size", C.DEFAULT_RAIL_SIZE),
@@ -279,7 +274,7 @@ class CenturioUI:
                 self.body.content = self.library_body
                 self._render_palette()
                 self._render_bulk_bar()
-                self.chrome.sync_search_box(self._palette_count)
+                self.chrome.sync_search_box()
                 self._render_popover()
                 self._trim_tile_cache()
             finally:
@@ -338,7 +333,7 @@ class CenturioUI:
             try:
                 self._render_palette()
                 self._render_bulk_bar()
-                self.chrome.sync_search_box(self._palette_count)
+                self.chrome.sync_search_box()
                 self._render_popover()
             finally:
                 self._snapshot = None
@@ -397,14 +392,12 @@ class CenturioUI:
 
     def _render_palette(self):
         if not self.view.palette_open:
-            self._palette_count = 0
             self.palette_layer.visible = False
             self.palette_card.content = None
             self.palette_card.opacity = 0
             self.palette_card.offset = ft.Offset(0, -0.02)
             return
         rows = self._palette_rows()
-        self._palette_count = len(rows)
         self.palette_card.content = screens.build_palette(self, rows)
         self.palette_card.opacity = 1
         self.palette_card.offset = ft.Offset(0, 0)

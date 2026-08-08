@@ -43,8 +43,6 @@ def build_triage_screen(ui):
                Wg.cat_glyph(cat, size=17, color=C.category_color(cat) if first else C.TEXT_2),
                T(cat["name"], size=13.5, weight=ft.FontWeight.W_600 if first else None,
                  color=C.TEXT if first else C.TEXT_2)]
-        if first and not ui.calm():
-            row.append(T("похоже", size=11, color=C.MUTED_2))
         chips.append(ft.Container(
             ft.Row(row, spacing=9, tight=True,
                    vertical_alignment=ft.CrossAxisAlignment.CENTER),
@@ -102,7 +100,7 @@ def _triage_done(ui):
             T(text + "Новое появится здесь само — заходить специально не нужно.",
               size=13, color=C.MUTED_2, width=300, text_align=ft.TextAlign.CENTER),
             ft.Container(ft.Row([
-                Wg.primary_btn("К библиотеке", ui.back_to_grid, ui._accent(), ui.calm()),
+                Wg.primary_btn("К библиотеке", ui.back_to_grid, ui._accent()),
                 Wg.outline_btn("Поискать ещё", ui.open_add),
             ], spacing=8, alignment=ft.MainAxisAlignment.CENTER),
                 padding=ft.padding.only(0, 8, 0, 0)),

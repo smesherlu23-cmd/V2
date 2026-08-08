@@ -2041,7 +2041,6 @@ def test_ui_single_screen_layout():
 
     with tempfile.TemporaryDirectory() as d:
         store = Store(os.path.join(d, "data.json"))
-        store.set_setting("calm", False)  # this test is about the fuller, non-calm chrome
         store.add_app({"name": "Notion", "path": "/x/notion.exe", "category_id": "work",
                        "quick": True, "favorite": True})
         chrome = store.add_app({"name": "Chrome", "path": "/x/chrome.exe",
@@ -2059,7 +2058,8 @@ def test_ui_single_screen_layout():
 
         head = _texts(ui.header_holder)
         ok("Centurio" in head, "the header carries the logo")
-        ok("Ctrl+Пробел" in head, "and the combination that opens the search")
+        ok("Ctrl+Пробел" not in head,
+           "the search hotkey chip is a pure hint — it stays gone from the idle header")
         ok(not any("Запуск" == t for t in head),
            "the mode switch is gone with the second window")
         ok(ui.search_field.hint_text == "Найти или запустить",
@@ -2071,7 +2071,6 @@ def test_ui_single_screen_layout():
         side = _texts(ui.sidebar_container)
         for label in ("Все программы", "Избранное", "Недавние", "Запущено", "НАБОРЫ"):
             ok(label in side, f"the sidebar has «{label}»")
-        ok("2" in side, "its subtitle is the number of programs, nothing else")
         ok(not any("приложени" in t for t in side),
            "the two-part «128 приложений · 4 категории» line was shortened away")
         ok("НЕДАВНИЕ" not in side, "the recent list that duplicated the grid is gone")
@@ -2085,12 +2084,12 @@ def test_ui_single_screen_layout():
 
         content = _texts(ft.Column(ui.content_col.controls))
         ok("Быстрый запуск" in content, "the quick-launch strip is still drawn")
-        ok("Ctrl+1…9" in content, "with the range it answers to")
+        ok("Ctrl+1…9" not in content, "but the pure key-hint legend stays gone")
         ok("Работа" in content, "and the category sections below it")
 
         ui.set_running([chrome["id"]])
-        ok(any("запущено" in t for t in _texts(ui.sidebar_container)),
-           "the sidebar footer reports what is running")
+        ok(not any("запущено" in t for t in _texts(ui.sidebar_container)),
+           "the sidebar footer's running count is a pure hint — stays gone too")
 
         ui.view.select_one(chrome["id"])
         ui.refresh()
@@ -2459,7 +2458,6 @@ def test_ui_inbox_badge_and_triage():
 
     with tempfile.TemporaryDirectory() as d:
         store = Store(os.path.join(d, "data.json"))
-        store.set_setting("calm", False)
         ui, _ = _ui_for(store)
 
         ok(not any("12" in t for t in _texts(ui.rail_container)),
@@ -2478,7 +2476,7 @@ def test_ui_inbox_badge_and_triage():
         ok("Разбор" in shown, "the queue is a screen inside the window")
         ok("OBS Studio" in shown, "showing one program at a time")
         ok("Творчество" in shown, "with the category it looks like")
-        ok("похоже" in shown, "marked as the suggestion")
+        ok("похоже" not in shown, "the pure «suggested» label is a hint — stays hidden")
 
         ui.keymap.handle_key(_key("1"))
         names = [a["name"] for a in store.state()["apps"]]
@@ -2750,7 +2748,6 @@ def test_ui_sets():
 
     with tempfile.TemporaryDirectory() as d:
         store = Store(os.path.join(d, "data.json"))
-        store.set_setting("calm", False)
         ids = [store.add_app({"name": n, "path": f"/x/{n}", "category_id": "work"})["id"]
                for n in ("VS Code", "Notion")]
         ui, page = _ui_for(store)
@@ -2771,7 +2768,8 @@ def test_ui_sets():
         ui.refresh()
         side = _texts(ui.sidebar_container)
         ok("VS Code и Notion" in side, "the sidebar lists the set")
-        ok("2 программы · раскладка" in side, "with what is in it and that it places windows")
+        ok("2 программы · раскладка" not in side,
+           "the pure item-count/layout subtitle is a hint — stays hidden")
 
         # Набор запускается в своём потоке — пауза между программами не должна
         # морозить окно. Здесь она обнулена, чтобы тест не ждал её вживую.
@@ -2879,7 +2877,6 @@ def test_ui_bulk_operations():
 
     with tempfile.TemporaryDirectory() as d:
         store = Store(os.path.join(d, "data.json"))
-        store.set_setting("calm", False)
         ids = [store.add_app({"name": n, "path": f"/x/{n}", "category_id": "work"})["id"]
                for n in ("A", "B", "C", "D")]
         ui, page = _ui_for(store)
@@ -2891,7 +2888,7 @@ def test_ui_bulk_operations():
         ok(not ui.bulk_layer.visible, "and the bar waits until something is picked")
         bar = _texts(ui.toolbar_holder)
         ok("Выбрать всё" in bar, "the toolbar offers to take the whole view")
-        ok(any("Ctrl+A" in t for t in bar), "and says how the mouse works here")
+        ok("Добавить" in bar, "the primary add button stays put, even in select mode")
 
         ui._tile_tap(ids[0], ids)
         ok(ui.view.sel == [ids[0]], "a click picks one")
@@ -2909,8 +2906,8 @@ def test_ui_bulk_operations():
         ok(ui.view.sel == [ids[0], ids[2]], "clicking a picked tile drops it")
 
         head = _texts(ft.Column(ui.content_col.controls))
-        ok(any("выбрано" in t for t in head),
-           "the section header counts the selection inside it")
+        ok(not any("выбрано" in t for t in head),
+           "the section header's own pure selection count is a hint — stays gone")
 
         ui._select_all_visible()
         ok(len(ui.view.sel) == 4, "«Выбрать всё» takes everything in the view")
@@ -2968,7 +2965,8 @@ def test_ui_bulk_operations():
 
 
 def test_ui_quick_numbers_match_the_hotkeys():
-    """A number in the quick strip is a promise that Ctrl+N does this."""
+    """Ctrl+N launches whichever quick card holds that slot — the card stays
+    quiet about it, but a program's own tooltip still spells it out."""
     try:
         from app.ui.app import CenturioUI  # noqa: F401
     except Exception as exc:
@@ -2977,7 +2975,6 @@ def test_ui_quick_numbers_match_the_hotkeys():
 
     with tempfile.TemporaryDirectory() as d:
         store = Store(os.path.join(d, "data.json"))
-        store.set_setting("calm", False)
         ids = [store.add_app({"name": n, "path": f"/x/{n}", "quick": True})["id"]
                for n in ("Notion", "Figma")]
         ui, _ = _ui_for(store)
@@ -2992,17 +2989,15 @@ def test_ui_quick_numbers_match_the_hotkeys():
 
         ui.view.close_set()
         ui.refresh()
-        # Только сама лента, без заголовков секций под ней: цифра в ленте — это
-        # обещание, что Ctrl+N запустит именно эту карточку.
+        # Только сама лента, без заголовков секций под ней.
         strip = ui.content_col.controls[1]
         numbers = [t for t in _texts(strip) if t.isdigit()]
-        ok(numbers.count("1") == 1 and numbers.count("2") == 1,
-           "and each number appears once — the set ahead of them claims none")
+        ok(not numbers, "the pure slot-number badge is a hint — it never prints on the card")
         tips = [c.tooltip for c in _walk(strip) if getattr(c, "tooltip", None)]
-        ok(any("Ctrl+Alt+1" in t for t in tips),
-           "the set carries its combination in a tooltip instead: a bare «1» in "
-           "this strip means Ctrl+1 and belongs to a program, and Ctrl+Alt+1 "
-           "written in the corner would crowd the icon")
+        ok(any("Ctrl+1" in t for t in tips) and any("Ctrl+2" in t for t in tips),
+           "but a program's own tooltip still spells out its combination")
+        ok(not any("Ctrl+Alt+1" in t for t in tips),
+           "the set's tooltip, on the other hand, drops the combination entirely")
 
         for n in range(3, 10):
             store.add_app({"name": f"App {n}", "path": f"/x/{n}", "quick": True})
@@ -3242,7 +3237,8 @@ def test_ui_calm_mode():
 
     with tempfile.TemporaryDirectory() as d:
         store = Store(os.path.join(d, "data.json"))
-        ok(store.settings()["calm"] is True, "calm is the default for a fresh install")
+        ok("calm" not in store.settings(),
+           "calm mode is the only mode now — there is no setting left to toggle it")
 
         app_id = store.add_app({"name": "Notion", "path": r"C:\Program Files\Notion\N.exe",
                                 "category_id": "work", "quick": True})["id"]
@@ -3317,21 +3313,12 @@ def test_ui_calm_mode():
         ok(footer is not None and footer.visible is not False,
            "item 7: and the triage key-legend footer is not force-hidden")
 
-        ui.view.set_screen("grid")
-        store.set_setting("calm", False)
-        ui.refresh()
-        loud = everything()
-        ok("Ctrl+1…9" in loud, "turning calm off restores the pure hints too")
 
-
-def test_ui_defaults_migration():
-    """Existing users had calm:false written to disk under the old default —
-    flipping DEFAULT_SETTINGS alone would never reach them. A one-time
-    version bump forces the new default in, once, without stomping on a
-    deliberate later choice to turn it back off."""
+def test_ui_defaults_legacy_calm_ignored():
+    """Old data files may still carry the retired calm:false setting on disk —
+    it is quietly dropped rather than resurrected, since calm mode is now the
+    only mode and there is nothing left to toggle."""
     import json
-
-    from app.core.store.sanitize import UI_DEFAULTS_VERSION
 
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "data.json")
@@ -3339,19 +3326,7 @@ def test_ui_defaults_migration():
             json.dump({"version": 3, "apps": [], "categories": [],
                       "settings": {"calm": False}}, fh)
         s = Store(path)
-        ok(s.settings()["calm"] is True,
-           "an old file with calm:false explicitly stored still migrates to true")
-        ok(s.settings()["ui_defaults_version"] == UI_DEFAULTS_VERSION,
-           "and is marked as migrated")
-
-        reloaded = Store(path)
-        ok(reloaded.settings()["calm"] is True,
-           "the migration was persisted — it does not need to re-run every launch")
-
-        reloaded.set_setting("calm", False)
-        again = Store(path)
-        ok(again.settings()["calm"] is False,
-           "a deliberate later choice to turn it back off is not overwritten again")
+        ok("calm" not in s.settings(), "the stale calm setting is not carried forward")
 
 
 def test_ui_search_palette():
@@ -3364,7 +3339,6 @@ def test_ui_search_palette():
 
     with tempfile.TemporaryDirectory() as d:
         store = Store(os.path.join(d, "data.json"))
-        store.set_setting("calm", False)
         code = store.add_app({"name": "VS Code", "path": "/x/code.exe",
                               "category_id": "dev", "quick": True})["id"]
         other = store.add_app({"name": "Notion", "path": "/x/n.exe",
@@ -3394,7 +3368,8 @@ def test_ui_search_palette():
         ok([r["app"]["name"] for r in rows] == ["Пусто"],
            "with nothing launched yet it falls back to what the library has")
         ok("Enter" in shown, "the highlighted row says what runs it")
-        ok(any("выбрать" in t for t in shown), "and the footer says how to move")
+        ok(not any("выбрать" in t for t in shown),
+           "the palette's own key-hint footer is a pure hint — stays gone")
 
         ok(ui.content_col.controls, "the grid behind it is still built")
         ui._on_search(types_ns(control=types_ns(value="code")))
@@ -3653,12 +3628,14 @@ def test_ui_settings_screen():
             ok(tab in shown, f"the section «{tab}» is in the left column")
         ok("Категории" not in shown, "and «Категории» is not a settings section")
         ok(ui.view.settings_tab == "view", "«Вид» is the one open to begin with")
-        for row in ("АКЦЕНТ", "ПЛОТНОСТЬ", "Спокойный вид", "Постеры для игр"):
+        for row in ("АКЦЕНТ", "ПЛОТНОСТЬ", "Постеры для игр"):
             ok(row in shown, f"«{row}» is on it")
+        ok("Спокойный вид" not in shown,
+           "calm mode is the only mode now — there is no switch left for it")
 
         # Каждая настройка живёт ровно в одном разделе и ничего не свёрнуто.
         expected = {
-            "keys": ("Вызов Centurio", "Подсказки клавиш"),
+            "keys": ("Вызов Centurio",),
             "startup": ("Запускать с Windows", "Крестик сворачивает в трей",
                         "Прятать окно после запуска"),
             "library": ("Складывать новое в разбор", "Проверять новое раз в 15 минут",
@@ -3671,9 +3648,12 @@ def test_ui_settings_screen():
             for row in rows:
                 ok(row in here, f"«{row}» is on the «{tab}» section")
             ok("АКЦЕНТ" not in here, f"and «{tab}» does not carry «Вид»'s controls")
+            if tab == "keys":
+                ok("Подсказки клавиш" not in here,
+                   "its own switch went with it — the footer it controlled is gone too")
         ui.set_settings_tab("view")
 
-        for key in ("hide_after", "autostart", "close_to_tray", "triage", "calm"):
+        for key in ("hide_after", "autostart", "close_to_tray", "triage"):
             before = bool(store.state()["settings"].get(key))
             ui.set_setting(key, not before)
             ok(store.state()["settings"][key] is (not before), f"«{key}» writes through")
