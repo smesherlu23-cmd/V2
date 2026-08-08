@@ -94,19 +94,15 @@ def _steam_cdn_art(appid: str, icon_cache: str | None) -> str | None:
     _cdn_mark_missed(key)
     return None
 
-def _steam_logo(cache: str, sub: str, appid: str) -> str | None:
-    for p in (os.path.join(cache, f"{appid}_logo.png"), os.path.join(sub, "logo.png")):
-        if os.path.exists(p):
-            return p
-    return None
-
 def _steam_icon(root: str, appid: str, icon_cache: str | None = None) -> tuple[str | None, str]:
     """The small square icon Steam itself shows in its library list — never
-    the capsule/header/hero cover art. That art is for posters: it's a wide
-    or tall photo, and forcing it into an icon-sized square just crops it
-    down to an unrecognisable sliver. Posters are fetched separately by
-    poster_for(), so an icon that can't find a real small one stays empty
-    (a neutral placeholder glyph) rather than borrowing the wrong image."""
+    the capsule/header/hero cover art, and not logo.png either: that one's
+    a wordmark meant to sit over the hero background (wide, often mostly
+    transparent), not a small icon — shrunk into an icon-sized square it
+    reads as an illegible smudge, same problem as the cover photos. Posters
+    are fetched separately by poster_for(), so an icon that can't find a
+    real small one stays empty (a neutral placeholder glyph) rather than
+    borrowing an image that isn't shaped for the job."""
     cache = os.path.join(root, "appcache", "librarycache")
     sub = os.path.join(cache, str(appid))
     icon = os.path.join(cache, f"{appid}_icon.jpg")
@@ -115,9 +111,6 @@ def _steam_icon(root: str, appid: str, icon_cache: str | None = None) -> tuple[s
     icon = os.path.join(sub, "icon.jpg")
     if os.path.exists(icon):
         return icon, "contain"
-    logo = _steam_logo(cache, sub, appid)
-    if logo:
-        return logo, "logo"
     return None, "contain"
 
 _STEAM_PORTRAIT_NAMES = ("library_600x900_2x.jpg", "library_600x900.jpg")

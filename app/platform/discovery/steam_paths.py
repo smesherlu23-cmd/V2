@@ -18,6 +18,13 @@ _STEAM_EXE_JUNK = ("unins", "uninstall", "vcredist", "vc_redist", "dxsetup", "dx
                    "cleanup", "touchup", "dotnet", "oalinst", "notification_helper",
                    "prereq", "activation", "diagnostic", "helper", "reporter")
 
+# Тот же список, но без "launcher": для track_exe маленький лаунчер — то,
+# от чего нужно избавиться (игра к моменту проверки уже запущена и это
+# не он), а вот для иконки — наоборот, чаще всего именно у него приличная
+# иконка, а не у движкового бинарника, который track_exe специально ищет.
+_STEAM_ICON_EXE_JUNK = tuple(j for j in _STEAM_EXE_JUNK if j != "launcher") + (
+    "dedicated", "server", "eac", "battleye", "easyanticheat", "anticheat")
+
 _STEAM_EXE_CACHE_NAME = "steam-exe.json"
 
 _exe_cache_lock = threading.Lock()
@@ -130,7 +137,53 @@ def _steam_game_exe_full(lib: str, installdir: str | None, name: str,
         _steam_exe_remember(icon_cache, appid, root, found)
     return found
 
-def _steam_exe_lookup(path: str, icon_cache: str | None, full: bool) -> str | None:
+def _steam_game_icon_exe(lib: str, installdir: str | None, name: str) -> str | None:
+    """Which exe to pull this game's icon from — a different pick than
+    _steam_game_exe_full/track_exe on purpose. track_exe wants whatever
+    process is actually running once the game is up, which tends to be the
+    big "-Shipping"/engine binary, however deep it sits — and that binary's
+    icon is usually just the generic engine one. The properly branded icon
+    is far more often on a small stub sitting right at the install root, so
+    here shallow and small wins over deep and big instead."""
+    if not installdir:
+        return None
+    root = os.path.join(lib, "steamapps", "common", installdir)
+    if not os.path.isdir(root):
+        return None
+    candidates: list[tuple[int, int, str, str]] = []
+    seen = 0
+    for dirpath, _dirs, files in os.walk(root):
+        depth = os.path.relpath(dirpath, root).count(os.sep)
+        for fn in files:
+            if not fn.lower().endswith(".exe"):
+                continue
+            seen += 1
+            if seen > 20000:
+                break
+            low = fn.lower()
+            if any(j in low for j in _STEAM_ICON_EXE_JUNK):
+                continue
+            full_path = os.path.join(dirpath, fn)
+            try:
+                size = os.path.getsize(full_path)
+            except OSError:
+                continue
+            candidates.append((depth, size, full_path, low))
+        if seen > 20000:
+            break
+    if not candidates:
+        return None
+    tokens = [t for t in re.split(r"[^a-z0-9]+", name.lower()) if len(t) >= 3]
+    named = [c for c in candidates if any(t in c[3] for t in tokens)]
+    pool = named or candidates
+    pool.sort(key=lambda c: (c[0], c[1]))
+    return pool[0][2]
+
+def _for_each_steam_manifest(path: str, cb):
+    """Finds the manifest for this steam:// path across every library and
+    runs cb(lib, installdir, name, appid) against it, returning the first
+    truthy result — the shared plumbing behind steam_exe_for() and
+    steam_icon_exe_for(), which only differ in which exe they want."""
     m = re.match(r"steam://rungameid/(\d+)", path or "")
     if not m or os.name != "nt":
         return None
@@ -143,21 +196,23 @@ def _steam_exe_lookup(path: str, icon_cache: str | None, full: bool) -> str | No
                     text = fh.read()
             except OSError:
                 continue
-            exe = _steam_game_exe_full(lib, _vdf_val(text, "installdir"),
-                                       _vdf_val(text, "name") or "", icon_cache, appid)
-            if exe:
-                return exe if full else os.path.basename(exe)
+            result = cb(lib, _vdf_val(text, "installdir"), _vdf_val(text, "name") or "", appid)
+            if result:
+                return result
     return None
 
 def steam_exe_for(path: str, icon_cache: str | None = None) -> str | None:
     """The game's own executable, just the filename — for matching running
     windows against track_exe."""
-    return _steam_exe_lookup(path, icon_cache, full=False)
+    return _for_each_steam_manifest(
+        path, lambda lib, installdir, name, appid:
+            _steam_game_exe(lib, installdir, name, icon_cache, appid))
 
-def steam_exe_full_path_for(path: str, icon_cache: str | None = None) -> str | None:
-    """Same lookup, full path — for actually opening the file, e.g. to pull
-    its icon when Steam hasn't cached one of its own for this game."""
-    return _steam_exe_lookup(path, icon_cache, full=True)
+def steam_icon_exe_for(path: str) -> str | None:
+    """Full path to the exe most likely to carry this game's real icon —
+    for when Steam hasn't cached a small icon of its own for it."""
+    return _for_each_steam_manifest(
+        path, lambda lib, installdir, name, appid: _steam_game_icon_exe(lib, installdir, name))
 
 def _steam_roots() -> list[str]:
     roots = []
@@ -214,18 +269,19 @@ def _steam_games(icon_cache: str | None) -> list[dict]:
                 if any(s in name.lower() for s in _STEAM_SKIP_NAME):
                     continue
                 seen.add(appid)
+                installdir = _vdf_val(text, "installdir")
                 icon, fit = steam_art._steam_icon(root, appid, icon_cache)
                 poster = steam_art._steam_portrait(root, appid, icon_cache)
-                exe_full = (_steam_game_exe_full(lib, _vdf_val(text, "installdir"), name,
-                                                 icon_cache, appid)
-                           if os.name == "nt" else None)
-                track = os.path.basename(exe_full) if exe_full else None
-                if not icon and exe_full and icon_cache:
+                track = (_steam_game_exe(lib, installdir, name, icon_cache, appid)
+                         if os.name == "nt" else None)
+                if not icon and os.name == "nt" and icon_cache:
                     # Steam не закэшировал свою маленькую иконку для этой игры —
                     # вытаскиваем настоящую иконку прямо из её exe, как для
                     # обычных программ, а не остаёмся с пустым местом.
-                    icon = _extract_exe_icon(exe_full, icon_cache)
-                    fit = "contain"
+                    icon_exe = _steam_game_icon_exe(lib, installdir, name)
+                    if icon_exe:
+                        icon = _extract_exe_icon(icon_exe, icon_cache)
+                        fit = "contain"
                 games.append({"name": name, "path": f"steam://rungameid/{appid}",
                               "icon": icon, "icon_fit": fit, "source": "steam",
                               "sub": "Steam", "track_exe": track, "poster": poster})
