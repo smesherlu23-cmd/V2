@@ -28,6 +28,19 @@ python main.py
 
 Готовый установщик собирается из `installer/centurio.iss` (Inno Setup).
 
+## Релиз
+
+```powershell
+.\scripts\build_release.ps1
+```
+
+Только на Windows: сверяет версию (`app/__init__.py`, `pyproject.toml`,
+`installer/centurio.iss` — той же проверкой, что и CI), гоняет линтер и тесты,
+собирает `build\windows\Centurio.exe`, а если найден Inno Setup —
+и `installer\Output\CenturioSetup.exe`. `-SkipTests` — пропустить проверки,
+`-SkipInstaller` — собрать только exe, `-NoClean` — не чистить прошлую сборку.
+Подробности: `Get-Help .\scripts\build_release.ps1 -Full`.
+
 ## Ключи запуска
 
 | Ключ | Действие |

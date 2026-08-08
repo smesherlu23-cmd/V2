@@ -8,6 +8,7 @@ env/
 build/
 dist/
 *.spec
+installer/Output/
 
 .DS_Store
 Thumbs.db
