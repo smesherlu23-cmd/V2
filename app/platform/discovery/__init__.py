@@ -48,6 +48,7 @@ from .windows import (  # noqa: F401
     _win_extract_store_one,
     raw_windows_entries,
     store_parts,
+    trim_transparent_padding,
 )
 
 __all__ = [
@@ -65,6 +66,7 @@ __all__ = [
     "resolve_icon_for",
     "steam_exe_for",
     "suggest_first_run",
+    "trim_transparent_padding",
 ]
 
 

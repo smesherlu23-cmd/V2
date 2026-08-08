@@ -33,7 +33,10 @@ def resolve_icon_for(path: str, icon_cache: str | None = None) -> tuple[str | No
     if path.lower().startswith("shell:appsfolder\\"):
         try:
             if os.name == "nt":
-                return windows._win_extract_store_one(path, icon_cache), "contain"
+                icon = windows._win_extract_store_one(path, icon_cache)
+                if icon:
+                    windows.trim_transparent_padding(icon)
+                return icon, "contain"
         except Exception:
             log.exception("resolve_icon_for (Store) failed for %s", path)
         return None, "contain"

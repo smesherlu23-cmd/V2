@@ -56,6 +56,7 @@ class CenturioUI:
         self._tile_cache: OrderedDict[str, tuple] = OrderedDict()
         self._tiles_used: set[str] = set()
         self._tile_epoch: tuple = ()
+        self._add_ui: dict | None = None
         self._cat_index: dict[str, dict] = {}
         self._visible = True
         self._dirty = False
@@ -960,6 +961,7 @@ class CenturioUI:
     def open_add(self):
         self.view.set_screen("add")
         self.view.reset_add()
+        self._add_ui = None
         self.scan.start_scan()
         self.refresh()
 
