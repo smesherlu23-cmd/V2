@@ -5,10 +5,7 @@ import hashlib
 from .. import layout as L
 
 DEFAULT_CATEGORIES = [
-    {"id": "work", "name": "Работа", "icon": "work", "color": "#ffffff", "order": 0},
-    {"id": "create", "name": "Творчество", "icon": "brush", "color": "#ffffff", "order": 1},
-    {"id": "games", "name": "Игры", "icon": "sports_esports", "color": "#ffffff", "order": 2},
-    {"id": "dev", "name": "Разработка", "icon": "code", "color": "#ffffff", "order": 3},
+    {"id": "work", "name": "Новая", "icon": "folder", "color": "#ffffff", "order": 0},
 ]
 
 DEFAULT_LAUNCH_HOTKEY = "Ctrl+Space"

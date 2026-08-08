@@ -92,7 +92,7 @@ def test_store():
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "data.json")
         s = Store(path)
-        ok(len(s.state()["categories"]) == 4, "seeds 4 default categories")
+        ok(len(s.state()["categories"]) == 1, "seeds a single «Новая» category")
         ok(s.state()["apps"] == [], "starts with no apps")
 
         a = s.add_app({"name": "VS Code", "path": "/usr/bin/code", "category_id": "dev"})
@@ -177,8 +177,9 @@ def test_store_sets_inbox_undo():
     """Наборы, очередь разбора и обратимость — то, что добавил редизайн."""
     with tempfile.TemporaryDirectory() as d:
         s = Store(os.path.join(d, "data.json"))
+        create_cat = s.add_category("Творчество")
         one = s.add_app({"name": "Notion", "path": "/x/n", "category_id": "work"})
-        two = s.add_app({"name": "Figma", "path": "/x/f", "category_id": "create"})
+        two = s.add_app({"name": "Figma", "path": "/x/f", "category_id": create_cat["id"]})
 
         rec = s.add_set("Рабочее утро", [one["id"], two["id"], "no-such-app"])
         ok(rec is not None and rec["apps"] == [one["id"], two["id"]],
@@ -196,10 +197,10 @@ def test_store_sets_inbox_undo():
         ok(s.update_apps([one["id"], two["id"]], {"favorite": True}) == 2,
            "update_apps patches every id it was given in one write")
 
-        undo = s.remove_category("create")
+        undo = s.remove_category(create_cat["id"])
         ok(undo and two["id"] in undo["apps"], "remove_category reports the apps it moved")
         ok(s.restore_category(undo) is True, "and the category can be put back")
-        ok(s.get_app(two["id"])["category_id"] == "create", "with its apps in it")
+        ok(s.get_app(two["id"])["category_id"] == create_cat["id"], "with its apps in it")
 
         # ---- очередь разбора ----
         added = s.queue_inbox([
@@ -2233,7 +2234,7 @@ def test_ui_single_screen_layout():
         content = _texts(ft.Column(ui.content_col.controls))
         ok("Быстрый запуск" in content, "the quick-launch strip is still drawn")
         ok("Ctrl+1…9" not in content, "but the pure key-hint legend stays gone")
-        ok("Работа" in content, "and the category sections below it")
+        ok("Новая" in content, "and the category sections below it")
 
         ui.set_running([chrome["id"]])
         ok(not any("запущено" in t for t in _texts(ui.sidebar_container)),
@@ -2606,6 +2607,10 @@ def test_ui_inbox_badge_and_triage():
 
     with tempfile.TemporaryDirectory() as d:
         store = Store(os.path.join(d, "data.json"))
+        # A fresh library starts with one catch-all category — anything more
+        # specific ("Творчество" for OBS below) is the user's own doing, so
+        # add it here to exercise the suggestion actually picking it by name.
+        creative_id = store.add_category("Творчество")["id"]
         ui, _ = _ui_for(store)
 
         ok(not any("12" in t for t in _texts(ui.rail_container)),
@@ -2629,7 +2634,7 @@ def test_ui_inbox_badge_and_triage():
         ui.keymap.handle_key(_key("1"))
         names = [a["name"] for a in store.state()["apps"]]
         ok(names == ["OBS Studio"], "1 puts it in the first offered category")
-        ok(store.get_app(store.state()["apps"][0]["id"])["category_id"] == "create",
+        ok(store.get_app(store.state()["apps"][0]["id"])["category_id"] == creative_id,
            "the one that was suggested")
         ok(len(store.state()["inbox"]) == 1, "and the queue moves on")
 
@@ -2699,7 +2704,7 @@ def test_ui_context_menus():
         ok(len(submenu) == 2, "two of its entries open submenus")
         ui.menu.toggle_submenu("cat", ui.context_menus._category_submenu(ids[:2]), 250)
         ok(ui.menu.sub_card.visible, "and the submenu opens next to the menu")
-        ok("Работа" in _texts(ui.menu.sub_card), "listing the categories to move into")
+        ok("Новая" in _texts(ui.menu.sub_card), "listing the categories to move into")
 
         ui.menu.close()
         ok(not ui.menu.open, "clicking away closes it")
@@ -2803,6 +2808,7 @@ def test_ui_delete_is_undone_not_confirmed():
 
     with tempfile.TemporaryDirectory() as d:
         store = Store(os.path.join(d, "data.json"))
+        store.add_category("Творчество")  # a second category to move apps into below
         ids = [store.add_app({"name": n, "path": f"/x/{n}", "category_id": "work"})["id"]
                for n in ("Notion", "Figma")]
         ui, page = _ui_for(store)
@@ -3176,6 +3182,7 @@ def test_ui_add_screen():
         discovery.backfill_icons = lambda *a, **kw: False
         with tempfile.TemporaryDirectory() as d:
             store = Store(os.path.join(d, "data.json"))
+            games_id = store.add_category("Игры")["id"]
             store.add_app({"name": "Notion", "path": "/x/notion.exe", "category_id": "work"})
             ui, _ = _ui_for(store)
 
@@ -3211,10 +3218,10 @@ def test_ui_add_screen():
             ok("Notion" in names, "turning it off shows what is already there")
 
             rows = {r["name"]: r for g in ui.scan.found_groups() for r in g["rows"]}
-            ok(ui.scan.add_category_for(rows["Elden Ring"]) == "games",
+            ok(ui.scan.add_category_for(rows["Elden Ring"]) == games_id,
                "a Steam game is proposed for «Игры»")
             ui.scan.cycle_add_category(rows["Elden Ring"])
-            ok(ui.scan.add_category_for(rows["Elden Ring"]) != "games",
+            ok(ui.scan.add_category_for(rows["Elden Ring"]) != games_id,
                "and the proposal can be overridden in the row")
 
             ui.scan.toggle_add_row(rows["Notion"])
@@ -3414,7 +3421,7 @@ def test_ui_calm_mode():
 
         ui._open_palette()
         palette = _texts(ui.palette_layer)
-        ok(any("Работа" in t or "назад" in t for t in palette),
+        ok(any("Новая" in t or "назад" in t for t in palette),
            "item 4: a palette row still carries its category/last-launched subtitle")
         ok(not any("выбрать" in t for t in palette),
            "but the palette's own key-hint footer is a pure hint — still gone")
@@ -3745,7 +3752,7 @@ def test_ui_icons_are_never_letters():
         ok(slot.bgcolor == C.SLOT_BG, "an icon-less app gets the neutral pad")
         ok(isinstance(slot.content, ft.Icon), "with a glyph, not a letter")
         ok(slot.content.color == C.SLOT_GLYPH, "in the muted placeholder colour")
-        ok(slot.content.name == ft.Icons.WORK, "and the glyph is its category's")
+        ok(slot.content.name == ft.Icons.FOLDER, "and the glyph is its category's")
 
         icon_png = iconify.generate_icon(os.path.join(d, "real.png"), 32)
         store.update_app(app["id"], {"icon": str(icon_png)})
