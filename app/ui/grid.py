@@ -326,13 +326,13 @@ class GridView:
         self.ui._reorder_apps(section_ids, list(payload["ids"]), target_id)
 
     def _tile_meta(self, app, cat) -> str:
+        if self.ui.calm():
+            return ""
         if self.ui.view.select_mode:
-            return "" if self.ui.calm() else (cat["name"] if cat else "")
+            return cat["name"] if cat else ""
         accel = self.ui._accels.get(app["id"])
         if accel:
             return accel
-        if self.ui.calm():
-            return ""
         ago = short_ago(app.get("last_launched"))
         if ago:
             return ago
