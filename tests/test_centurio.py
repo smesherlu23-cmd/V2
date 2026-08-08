@@ -403,6 +403,25 @@ def test_discovery_sources():
     source = "\n".join(text for _label, text in _sources("platform/discovery"))
     ok("'startmenu'" in source, "the Start Menu pass tags what it finds")
     ok("'registry'" in source, "and so do the uninstall and App Paths passes")
+    ok("'localapps'" in source,
+       "and a %LocalAppData%\\Programs fallback catches apps neither of those sees")
+    ok("LOCALAPPDATA" in discovery._WIN_PS, "that fallback actually scans the real folder")
+    ok(".EndsWith('.lnk')" in discovery._WIN_PS and ".EndsWith('.exe')" in discovery._WIN_PS,
+       "Get-StartApps entries without a Store-style '!' id are resolved too, not dropped")
+
+    from app.platform.discovery import windows as _dw
+    real_run = _dw._run_powershell
+    try:
+        _dw._run_powershell = lambda script, timeout=60: types_ns(
+            stdout='[{"name":"Visual Studio Code",'
+                   '"path":"C:/Users/u/AppData/Local/Programs/Microsoft VS Code/Code.exe",'
+                   '"src":"localapps"}]',
+            stderr="", returncode=0)
+        found = discovery._discover_windows(None)
+        ok(found and found[0]["source"] == "localapps",
+           "an app found only via the Programs-folder fallback keeps that source")
+    finally:
+        _dw._run_powershell = real_run
 
     merged = discovery._dedupe([
         {"name": "A", "path": "C:/a.exe", "source": "startmenu"},

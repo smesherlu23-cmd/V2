@@ -224,11 +224,19 @@ foreach($k in $uks){
     if($exe){ Add-App $pr.DisplayName $exe 'registry' }
   }
 }
-$aps=@('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths')
+$aps=@('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths','HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths')
 foreach($k in $aps){
   Get-ChildItem -LiteralPath $k 2>$null | ForEach-Object {
     $p=(Get-Item -LiteralPath $_.PSPath).GetValue(''); if($p){ $p=$p.Trim('"') }
     if($p -and $p.ToLower().EndsWith('.exe') -and (Test-Path -LiteralPath $p)){ Add-App ([System.IO.Path]::GetFileNameWithoutExtension($p)) $p 'registry' }
+  }
+}
+
+$lp=Join-Path $env:LOCALAPPDATA 'Programs'
+if(Test-Path -LiteralPath $lp){
+  Get-ChildItem -LiteralPath $lp -Directory 2>$null | ForEach-Object {
+    $exe=Best-Exe $_.FullName $_.Name
+    if($exe){ Add-App $_.Name $exe 'localapps' }
   }
 }
 
@@ -244,6 +252,11 @@ try{
       $skip=$false
       foreach($s in $sysapp){ if($low.StartsWith($s)){ $skip=$true } }
       if(-not $skip){ Add-Store $_.Name $id }
+    } elseif($id -and $id.ToLower().EndsWith('.lnk') -and (Test-Path -LiteralPath $id)){
+      $t=$sh.CreateShortcut($id); $p=$t.TargetPath
+      if($p -and $p.ToLower().EndsWith('.exe') -and (Test-Path -LiteralPath $p)){ Add-App $_.Name $p 'startmenu' }
+    } elseif($id -and $id.ToLower().EndsWith('.exe') -and (Test-Path -LiteralPath $id)){
+      Add-App $_.Name $id 'startmenu'
     }
   }
 }catch{}
@@ -317,7 +330,8 @@ def _discover_windows(icon_cache: str | None) -> list[dict]:
         name, path = x.get("name"), x.get("path")
         if not name or not path or _is_windows_system(name, path):
             continue
-        src = x.get("src") if x.get("src") in ("startmenu", "registry", "store") else "registry"
+        src = (x.get("src") if x.get("src") in ("startmenu", "registry", "store", "localapps")
+               else "registry")
         apps.append({"name": name, "path": path, "icon": x.get("icon"),
                      "icon_fit": "contain", "source": src,
                      "sub": "Microsoft Store" if src == "store" else ""})
