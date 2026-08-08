@@ -139,11 +139,6 @@ function Get-LogoAttr($text,$attr){
   return $null
 }
 try{ Import-Module Appx -ErrorAction SilentlyContinue -Verbose:$false } catch {}
-$script:StoreFails=0
-function Note-StoreFail($family,$why){
-  $script:StoreFails++
-  if($script:StoreFails -le 5){ [Console]::Error.WriteLine("StoreIcon: $family : $why") }
-}
 function Get-Pkg($family){
   $pkg=Get-AppxPackage -PackageFamilyName $family -ErrorAction SilentlyContinue | Select-Object -First 1
   if($pkg){ return $pkg }
@@ -151,14 +146,18 @@ function Get-Pkg($family){
   return $pkg
 }
 function Save-StoreIcon($family,$appId){
-  if(-not $cache -or -not $family){ return $null }
+  if(-not $cache -or -not $family){ return [PSCustomObject]@{icon=$null;err='no cache dir'} }
   $f=Join-Path $cache ((Md5 "store:$family!$appId")+'_store.png')
-  if(Test-Path -LiteralPath $f){ return $f }
+  if(Test-Path -LiteralPath $f){ return [PSCustomObject]@{icon=$f;err=$null} }
   try{
     $pkg=Get-Pkg $family
-    if(-not $pkg -or -not $pkg.InstallLocation){ Note-StoreFail $family 'Get-AppxPackage вернул пусто'; return $null }
+    if(-not $pkg -or -not $pkg.InstallLocation){
+      return [PSCustomObject]@{icon=$null;err='Get-AppxPackage вернул пусто'}
+    }
     $manifestPath=Join-Path $pkg.InstallLocation 'AppxManifest.xml'
-    if(-not (Test-Path -LiteralPath $manifestPath)){ Note-StoreFail $family "нет доступа к $manifestPath"; return $null }
+    if(-not (Test-Path -LiteralPath $manifestPath)){
+      return [PSCustomObject]@{icon=$null;err="нет доступа к $manifestPath"}
+    }
     $text=Get-Content -LiteralPath $manifestPath -Raw
     $logoRel=$null
     if($appId){
@@ -177,12 +176,12 @@ function Save-StoreIcon($family,$appId){
       $m=[regex]::Match($text,'<Logo>([^<]+)</Logo>')
       if($m.Success){ $logoRel=$m.Groups[1].Value }
     }
-    if(-not $logoRel){ Note-StoreFail $family 'манифест без Logo/Square*Logo'; return $null }
+    if(-not $logoRel){ return [PSCustomObject]@{icon=$null;err='манифест без Logo/Square*Logo'} }
     $src=Resolve-StoreAsset $pkg.InstallLocation $logoRel
-    if(-not $src){ Note-StoreFail $family "не нашёл файл ассета для $logoRel"; return $null }
+    if(-not $src){ return [PSCustomObject]@{icon=$null;err="не нашёл файл ассета для $logoRel"} }
     Copy-Item -LiteralPath $src -Destination $f -Force
-    return $f
-  }catch{ Note-StoreFail $family $_.Exception.Message; return $null }
+    return [PSCustomObject]@{icon=$f;err=$null}
+  }catch{ return [PSCustomObject]@{icon=$null;err=$_.Exception.Message} }
 }
 '''
 
@@ -195,8 +194,8 @@ function Add-Store($n,$id){
   $parts=$id -split '!',2
   $family=$parts[0]
   $appId=if($parts.Count -gt 1){ $parts[1] } else { 'App' }
-  $ic=Save-StoreIcon $family $appId
-  [void]$out.Add([PSCustomObject]@{name="$n";path="shell:AppsFolder\$id";icon=$ic;src='store'})
+  $r=Save-StoreIcon $family $appId
+  [void]$out.Add([PSCustomObject]@{name="$n";path="shell:AppsFolder\$id";icon=$r.icon;src='store';icon_err=$r.err})
 }
 
 $rootish=@('','\','c:\','c:\program files','c:\program files (x86)','c:\windows','c:\users')
@@ -283,7 +282,7 @@ if($r){ Write-Output $r }
 
 _WIN_STORE_ICON_ONE_PS = _PS_ICON_FUNCS + r'''
 $r=Save-StoreIcon __FAMILY__ __APPID__
-if($r){ Write-Output $r }
+if($r.icon){ Write-Output $r.icon }
 '''
 
 _STORE_PATH_RE = re.compile(r"^shell:appsfolder\\([^!]+)(?:!(.*))?$", re.IGNORECASE)

@@ -420,6 +420,15 @@ def test_discovery_sources():
         found = discovery._discover_windows(None)
         ok(found and found[0]["source"] == "localapps",
            "an app found only via the Programs-folder fallback keeps that source")
+
+        _dw._run_powershell = lambda script, timeout=60: types_ns(
+            stdout='[{"name":"Game Bar","path":"shell:AppsFolder\\\\X!App","src":"store",'
+                   '"icon_err":"Get-AppxPackage вернул пусто"}]',
+            stderr="", returncode=0)
+        raw, _stderr, _code = discovery.raw_windows_entries(None)
+        ok(raw[0]["icon_err"] == "Get-AppxPackage вернул пусто",
+           "a Store app's icon failure reason travels through raw_windows_entries "
+           "untouched, for app.diagnose to print")
     finally:
         _dw._run_powershell = real_run
 
@@ -1381,12 +1390,14 @@ def test_discovery():
         ok(not remaining, f"{name}: all placeholders substituted")
 
     for fn in ("Best-Exe", "Get-StartApps", "Save-StoreIcon", "Resolve-StoreAsset", "Add-Store",
-              "Get-LogoAttr", "Get-Pkg", "Note-StoreFail"):
+              "Get-LogoAttr", "Get-Pkg"):
         ok(fn in discovery._WIN_PS, f"_WIN_PS defines/calls {fn}")
     ok("-AllUsers" in discovery._WIN_PS,
        "a per-user Get-AppxPackage miss gets a second, -AllUsers try")
     ok("Import-Module Appx" in discovery._WIN_PS,
        "the Appx module is loaded explicitly, in case autoloading is off")
+    ok("icon_err" in discovery._WIN_PS,
+       "Save-StoreIcon's failure reason travels back in the JSON itself, not stderr")
 
     ok(discovery.store_parts("shell:AppsFolder\\Contoso.App_8wekyb3d8bbwe!App")
        == ("Contoso.App_8wekyb3d8bbwe", "App"), "store_parts splits family and appId on '!'")
