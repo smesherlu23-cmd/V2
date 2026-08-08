@@ -34,6 +34,32 @@ _CATEGORY_HINTS = (
                "origin", "ea app", "riot client", "roblox", "minecraft")),
 )
 
+# The ids above ("games", "dev", "create") name a *kind* of category, not a
+# literal id — they only resolve straight through when the built-in
+# category with that id is still around. The moment someone deletes or
+# replaces the defaults, that id no longer exists in their library at all,
+# so matching stops there instead of guessing: falling back to the first
+# category in the list (whatever that happens to be) is worse than no hint.
+# This is the fallback for that case — guess which of the *user's own*
+# categories plays that role by name, in whatever language they called it.
+_CATEGORY_NAME_HINTS = {
+    "games": ("игр", "game", "геймин", "gaming"),
+    "dev": ("разработ", "код", "development", "coding", "programming"),
+    "create": ("творч", "дизайн", "creat", "design"),
+}
+
+
+def _category_for_kind(categories: list[dict], kind: str) -> str | None:
+    for c in categories:
+        if c["id"] == kind:
+            return c["id"]
+    needles = _CATEGORY_NAME_HINTS.get(kind, ())
+    for c in categories:
+        name = (c.get("name") or "").lower()
+        if any(n in name for n in needles):
+            return c["id"]
+    return None
+
 
 def valid_filter(f: str, categories: list[dict]) -> str:
     if f and f.startswith("category:"):
@@ -224,15 +250,15 @@ def match_spans(name: str, query: str) -> list[tuple[str, bool]]:
 def suggest_category(item: dict, categories: list[dict]) -> str | None:
     if not categories:
         return None
-    hinted = SOURCES.get((item.get("source") or "").lower(), {}).get("cat")
-    if not hinted:
+    kind = SOURCES.get((item.get("source") or "").lower(), {}).get("cat")
+    if not kind:
         haystack = f"{item.get('name', '')} {item.get('path', '')}".lower()
         for cid, needles in _CATEGORY_HINTS:
             if any(n in haystack for n in needles):
-                hinted = cid
+                kind = cid
                 break
-    known = {c["id"] for c in categories}
-    return hinted if hinted in known else categories[0]["id"]
+    match = _category_for_kind(categories, kind) if kind else None
+    return match or categories[0]["id"]
 
 
 def suggest_categories(item: dict, categories: list[dict], limit: int = 4) -> list[dict]:
