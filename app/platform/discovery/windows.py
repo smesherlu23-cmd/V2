@@ -139,11 +139,17 @@ function Get-LogoAttr($text,$attr){
   return $null
 }
 try{ Import-Module Appx -ErrorAction SilentlyContinue -Verbose:$false } catch {}
+$script:AllPkgs=$null
 function Get-Pkg($family){
-  $pkg=Get-AppxPackage -PackageFamilyName $family -ErrorAction SilentlyContinue | Select-Object -First 1
-  if($pkg){ return $pkg }
-  try{ $pkg=Get-AppxPackage -AllUsers -PackageFamilyName $family -ErrorAction SilentlyContinue | Select-Object -First 1 }catch{ $pkg=$null }
-  return $pkg
+  if($null -eq $script:AllPkgs){
+    $list=@()
+    try{ $list=@(Get-AppxPackage -ErrorAction SilentlyContinue) }catch{ $list=@() }
+    if($list.Count -eq 0){
+      try{ $list=@(Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue) }catch{ $list=@() }
+    }
+    $script:AllPkgs=$list
+  }
+  return $script:AllPkgs | Where-Object { $_.PackageFamilyName -eq $family } | Select-Object -First 1
 }
 function Save-StoreIcon($family,$appId){
   if(-not $cache -or -not $family){ return [PSCustomObject]@{icon=$null;err='no cache dir'} }
