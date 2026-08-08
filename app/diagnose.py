@@ -64,8 +64,10 @@ def run(search: str | None = None) -> None:
         print(f"  Store-приложений найдено: {len(store_raw)}, "
               f"с иконкой: {len(store_with_icon)}")
         for x in store_raw[:10]:
-            mark = "🖼" if x.get("icon") else "· нет иконки"
-            print(f"    {mark} {x.get('name', '')[:40]}")
+            if x.get("icon"):
+                print(f"    🖼 {x.get('name', '')[:40]}")
+            else:
+                print(f"    · нет иконки {x.get('name', '')[:40]} — {x.get('icon_err', '?')}")
 
         if search:
             print(f"\n  поиск «{search}» в сыром выводе PowerShell (до фильтрации):")
