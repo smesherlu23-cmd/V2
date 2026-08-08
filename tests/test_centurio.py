@@ -811,6 +811,40 @@ def test_store_batched_writes():
         ok(writes["n"] == 0, "and doesn't write at all")
 
 
+def test_backfill_icons_refresh_replaces_a_stale_icon():
+    """A normal backfill only fills a gap — an app that already has *some*
+    icon is left alone (see «backfill_icons fixes sub even when icon already
+    present»). A forced refresh (bumped ICON_SCHEMA, after a change to how
+    icons are resolved) has to be able to override that recorded icon too —
+    including clearing it to nothing when re-resolving now comes up empty —
+    or apps that picked up the wrong picture under old logic keep it forever."""
+    from app.platform import discovery
+
+    with tempfile.TemporaryDirectory() as d:
+        store = Store(os.path.join(d, "data.json"))
+        stale = store.add_app({"name": "Old Cover", "path": "/x/old.exe",
+                               "icon": "/fake/stale.jpg", "icon_fit": "cover"})
+        real_resolve = discovery.icons.resolve_icon_for
+        try:
+            discovery.icons.resolve_icon_for = lambda path, cache=None: (None, "contain")
+            ok(discovery.backfill_icons(store, None) is False,
+               "a plain backfill still leaves an already-icon'd app untouched")
+            ok(store.get_app(stale["id"])["icon"] == "/fake/stale.jpg",
+               "so the stale icon survives it")
+
+            changed = discovery.backfill_icons(store, None, refresh=True)
+            ok(changed, "a forced refresh that resolves to nothing still counts as a change")
+            ok(store.get_app(stale["id"])["icon"] is None,
+               "and it clears the stale icon rather than leaving it in place")
+
+            discovery.icons.resolve_icon_for = lambda path, cache=None: ("/fake/fresh.png", "contain")
+            discovery.backfill_icons(store, None, refresh=True)
+            ok(store.get_app(stale["id"])["icon"] == "/fake/fresh.png",
+               "and a forced refresh can likewise replace one icon with a better one")
+        finally:
+            discovery.icons.resolve_icon_for = real_resolve
+
+
 def test_image_cache_bounded():
     """The base64 caches used to keep every image the session ever touched."""
     try:
