@@ -1964,6 +1964,27 @@ def test_queries():
         vs.revalidate(store.state()["categories"])
         ok(vs.filter == "all", "revalidate falls back once the active category is gone")
 
+    # Category suggestions ("games" for a Steam app, say) name a *kind* of
+    # category, not a literal id — they only match straight through while
+    # the built-in "games"/"dev"/"create" category is still around.
+    steam_item = {"name": "Half-Life", "path": "steam://rungameid/70", "source": "steam"}
+    ok(queries.suggest_category(steam_item, [{"id": "games", "name": "Игры"},
+                                             {"id": "work", "name": "Работа"}]) == "games",
+       "the id match still wins when the default category is there")
+
+    ok(queries.suggest_category(steam_item, [{"id": "aaa", "name": "Работа"},
+                                             {"id": "bbb", "name": "Мои игрули"}]) == "bbb",
+       "gone (renamed/replaced), it falls back to a same-ish-named category by name")
+
+    ok(queries.suggest_category(steam_item, [{"id": "aaa", "name": "Gaming Rig"},
+                                             {"id": "bbb", "name": "Work"}]) == "aaa",
+       "the name match isn't tied to Russian either")
+
+    ok(queries.suggest_category(steam_item, [{"id": "work", "name": "Работа"},
+                                             {"id": "misc", "name": "Разное"}]) == "work",
+       "and when nothing matches by id or name, it falls back to the first "
+       "category in the list rather than staying stuck on the missing default")
+
 
 class _FakeWindow:
     def __init__(self):
