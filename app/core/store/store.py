@@ -176,7 +176,7 @@ class Store:
             "working_dir": app.get("working_dir") or "",
             "run_as_admin": bool(app.get("run_as_admin")),
             "sub": app.get("sub") or "",
-            "category_id": app.get("category_id") or (cats[0]["id"] if cats else "work"),
+            "category_id": app.get("category_id") or (cats[0]["id"] if cats else None),
             "hue": app["hue"] if isinstance(app.get("hue"), int) else sanitize.hue_from_string(app.get("name") or app.get("path") or ""),
             "icon": app.get("icon") or None,
             "icon_fit": app.get("icon_fit") or "contain",
