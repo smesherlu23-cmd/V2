@@ -13,10 +13,11 @@ SOURCES = {
     "startmenu": {"label": "Меню «Пуск»", "icon": "apps", "cat": None},
     "store": {"label": "Microsoft Store", "icon": "shopping_cart", "cat": None},
     "registry": {"label": "Реестр", "icon": "data_object", "cat": None},
+    "localapps": {"label": "Папка программ", "icon": "folder", "cat": None},
     "manual": {"label": "Вручную", "icon": "folder_open", "cat": None},
     "": {"label": "Другое", "icon": "folder", "cat": None},
 }
-SOURCE_ORDER = ("manual", "steam", "epic", "startmenu", "store", "registry", "")
+SOURCE_ORDER = ("manual", "steam", "epic", "startmenu", "store", "registry", "localapps", "")
 
 _CATEGORY_HINTS = (
     ("dev", ("jetbrains", "pycharm", "intellij", "webstorm", "rider", "clion", "goland",
