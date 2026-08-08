@@ -856,12 +856,12 @@ class CenturioUI:
 
     def _reorder_apps(self, section_ids, dragged_ids, target_id):
         dragged = [i for i in dragged_ids if i in section_ids]
-        if not dragged or target_id in dragged:
+        if not dragged or target_id in dragged or target_id not in section_ids:
             return
+        moving_right = section_ids.index(target_id) > section_ids.index(dragged[0])
         order = [i for i in section_ids if i not in dragged]
-        if target_id not in order:
-            return
-        order[order.index(target_id):order.index(target_id)] = dragged
+        idx = order.index(target_id) + (1 if moving_right else 0)
+        order[idx:idx] = dragged
         self.store.reorder_apps(order)
         if self.view.sort != "manual":
             self.view.set_sort("manual")
