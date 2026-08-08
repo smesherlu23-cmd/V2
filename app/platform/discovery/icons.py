@@ -28,8 +28,19 @@ def resolve_icon_for(path: str, icon_cache: str | None = None) -> tuple[str | No
             icon, fit = steam_art._steam_icon(root, appid, icon_cache)
             if icon:
                 return icon, fit
-        # Обложка (capsule/header) — не иконка, поэтому здесь без CDN-фолбэка
-        # на неё: постер для этого приложения отдельно берёт poster_for().
+        # Steam не закэшировал свою маленькую иконку — тащим её из exe самой
+        # игры, как для обычных программ. Обложку (capsule/header) сюда не
+        # берём: это не иконка, а постер для неё — отдельно, в poster_for().
+        if os.name == "nt" and icon_cache:
+            exe = steam_paths.steam_exe_full_path_for(path, icon_cache)
+            if exe and os.path.exists(exe):
+                try:
+                    icon = windows._win_extract_one(exe, icon_cache)
+                except Exception:
+                    log.exception("resolve_icon_for (Steam exe) failed for %s", path)
+                    icon = None
+                if icon:
+                    return icon, "contain"
         return None, "contain"
     if path.lower().startswith("shell:appsfolder\\"):
         try:

@@ -1431,6 +1431,20 @@ def test_discovery():
            "steam exe: largest non-junk exe is the fallback")
     ok(discovery._steam_game_exe("/x", None, "n") is None, "steam exe: no installdir -> None")
 
+    # track_exe (a bare filename, matched against running processes) and the
+    # icon-extraction fallback (which needs an openable file) read the same
+    # lookup — one is just the other's basename.
+    with tempfile.TemporaryDirectory() as d:
+        gdir = os.path.join(d, "steamapps", "common", "Portal")
+        os.makedirs(gdir)
+        exe_path = os.path.join(gdir, "portal.exe")
+        with open(exe_path, "wb") as fh:
+            fh.write(b"\0" * 500)
+        full = discovery.steam_paths._steam_game_exe_full(d, "Portal", "Portal")
+        ok(full == exe_path, "steam exe (full path): points at the real file, not just a name")
+        ok(os.path.basename(full) == discovery._steam_game_exe(d, "Portal", "Portal"),
+           "and its basename is exactly what _steam_game_exe already returned")
+
     for name, tmpl, subs in [
         ("_WIN_PS", discovery._WIN_PS, {"__DIRS__": "'C:\\x'", "__CACHE__": "'C:\\c'"}),
         ("_WIN_ICON_ONE_PS", discovery._WIN_ICON_ONE_PS, {"__CACHE__": "'C:\\c'", "__EXE__": "'C:\\a.exe'"}),
@@ -1506,6 +1520,30 @@ def test_discovery():
            "with the path and cache dir passed through untouched")
     finally:
         _win_mod._win_extract_store_one, os.name = real_extract, real_os_name
+
+    # A Steam game whose library cache has no small icon.jpg (and no logo)
+    # falls back to pulling one straight out of the game's own exe, the same
+    # way a plain .exe gets its icon — rather than staying empty forever.
+    real_exe_for, real_extract_one, real_os_name = (
+        discovery.steam_paths.steam_exe_full_path_for, _win_mod._win_extract_one, os.name)
+    calls = []
+    with tempfile.TemporaryDirectory() as d:
+        fake_exe = os.path.join(d, "game.exe")
+        with open(fake_exe, "wb") as fh:
+            fh.write(b"\0" * 10)
+        try:
+            os.name = "nt"
+            discovery.steam_paths.steam_exe_full_path_for = lambda path, cache: fake_exe
+            _win_mod._win_extract_one = (
+                lambda path, cache: calls.append((path, cache)) or "/cache/game.png")
+            icon, fit = discovery.resolve_icon_for("steam://rungameid/1604270", "/cache")
+            ok(icon == "/cache/game.png" and fit == "contain",
+               "resolve_icon_for falls back to the game's own exe icon")
+            ok(calls == [(fake_exe, "/cache")],
+               "extracting from the exe that steam_exe_full_path_for resolved")
+        finally:
+            (discovery.steam_paths.steam_exe_full_path_for, _win_mod._win_extract_one,
+             os.name) = real_exe_for, real_extract_one, real_os_name
 
     # 32-bit builds get silently handed the 32-bit PowerShell, whose HKLM
     # queries are then themselves registry-redirected — a native 64-bit-only
