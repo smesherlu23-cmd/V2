@@ -99,8 +99,8 @@ def main(page: ft.Page):
             page.window.resizable = True
             page.window.min_width = C.LIBRARY_MIN_W
             page.window.min_height = C.LIBRARY_MIN_H
-            width = s.get("win_w") or C.LIBRARY_W
-            height = s.get("win_h") or C.LIBRARY_H
+            width = max(C.LIBRARY_MIN_W, s.get("win_w") or C.LIBRARY_W)
+            height = max(C.LIBRARY_MIN_H, s.get("win_h") or C.LIBRARY_H)
             page.window.width = width
             page.window.height = height
             x, y = s.get("win_x"), s.get("win_y")
@@ -288,7 +288,7 @@ def main(page: ft.Page):
             maximized = page.window.maximized
             store.set_setting("win_max", maximized, persist=False)
             if not maximized:
-                if w and h:
+                if w and h and w >= C.LIBRARY_MIN_W and h >= C.LIBRARY_MIN_H:
                     store.set_setting("win_w", int(w), persist=False)
                     store.set_setting("win_h", int(h), persist=False)
                 if page.window.left is not None and page.window.top is not None:
