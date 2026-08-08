@@ -73,7 +73,7 @@ class InspectorPanel:
                            Wg.toggle(bool(app.get("quick")),
                                     lambda v: self.ui._toggle_quick(app["id"], v),
                                     self.ui._accent()),
-                           sub=self._quick_sub(app)),
+                           sub=self._quick_sub(app), always=True),
             self._insp_row("Своя горячая клавиша", self._hotkey_field(app),
                            sub="Нажмите комбинацию" if self.ui.view.capture
                            else "Работает из любого окна"),
@@ -101,16 +101,14 @@ class InspectorPanel:
                        footer], spacing=0, expand=True),
             border=ft.border.only(left=ft.BorderSide(1, C.LINE_2)), expand=True)
 
-    def _insp_row(self, label, control, sub=None):
+    def _insp_row(self, label, control, sub=None, always=False):
         left = [T(label, size=12.5, color=C.TEXT_2)]
-        if sub and not self.ui.calm():
+        if sub and (always or not self.ui.calm()):
             left.append(T(sub, size=11, color=C.MUTED_2))
         return ft.Row([ft.Column(left, spacing=1, tight=True, expand=True), control],
                       spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
     def _insp_tech(self, app):
-        if self.ui.calm():
-            return ft.Container(height=0)
         lines = []
         if app.get("path"):
             lines.append(T(app["path"], size=10.5, color=C.MUTED_2))

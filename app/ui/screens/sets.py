@@ -31,7 +31,7 @@ def _set_header(ui, rec):
         on_submit=lambda e: ui.set_ops.rename_set(rec["id"], e.control.value))
     count = len(rec["items"])
     meta = [T(f"{count} {plu_programs(count)}", size=12, color=C.MUTED_2)]
-    if accel and not ui.calm():
+    if accel:
         meta += [_meta_divider(),
                  ft.Container(T(accel, size=11.5, color=C.MUTED, font_family="monospace"),
                               tooltip="Открывает набор из любой программы")]

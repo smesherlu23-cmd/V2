@@ -30,7 +30,10 @@ class Store:
         self.write_error: str | None = None
         self.newer_version: int | None = None
         self._persist_debounce = Debounce(PERSIST_DEBOUNCE_DELAY, self._debounced_persist)
+        self._migrated_ui_defaults = False
         self.data = self._load()
+        if self._migrated_ui_defaults:
+            self._persist()
 
     def _debounced_persist(self) -> None:
         with self._lock:
@@ -43,7 +46,8 @@ class Store:
             "apps": [],
             "sets": [],
             "inbox": [],
-            "settings": dict(sanitize.DEFAULT_SETTINGS),
+            "settings": {**sanitize.DEFAULT_SETTINGS,
+                        "ui_defaults_version": sanitize.UI_DEFAULTS_VERSION},
         }
 
     def _load(self) -> dict:
@@ -88,13 +92,20 @@ class Store:
         have = {(a.get("path") or "").lower() for a in apps}
         inbox = [i for i in sanitize.clean_records(parsed.get("inbox"), sanitize.clean_inbox)
                  if i["path"].lower() not in have]
+        raw_settings = parsed.get("settings")
+        prior_version = raw_settings.get("ui_defaults_version") \
+            if isinstance(raw_settings, dict) else None
+        if not isinstance(prior_version, int) or isinstance(prior_version, bool):
+            prior_version = 0
+        if prior_version < sanitize.UI_DEFAULTS_VERSION:
+            self._migrated_ui_defaults = True
         return {
             "version": SCHEMA_VERSION,
             "categories": cats or copy.deepcopy(sanitize.DEFAULT_CATEGORIES),
             "apps": apps,
             "sets": [s for s in sets if s["items"]],
             "inbox": inbox,
-            "settings": sanitize.clean_settings(parsed.get("settings")),
+            "settings": sanitize.clean_settings(raw_settings),
         }
 
     def _quarantine_corrupt(self, raw: str) -> None:
