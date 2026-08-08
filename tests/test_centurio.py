@@ -2642,6 +2642,29 @@ def test_ui_delete_is_undone_not_confirmed():
            "the last category can't be deleted — the apps would have nowhere to go")
 
 
+def test_ui_reorder_apps_direction():
+    try:
+        from app.ui.app import CenturioUI  # noqa: F401
+    except Exception as exc:
+        skip("UI reorder direction test", exc)
+        return
+
+    with tempfile.TemporaryDirectory() as d:
+        store = Store(os.path.join(d, "data.json"))
+        cat_id = store.state()["categories"][0]["id"]
+        a, b, c = [store.add_app({"name": n, "path": f"/x/{n}", "category_id": cat_id})["id"]
+                   for n in ("A", "B", "C")]
+        ui, _ = _ui_for(store)
+
+        ui._reorder_apps([a, b, c], [a], b)
+        ok([r["id"] for r in sorted(store.state()["apps"], key=lambda r: r["order"])] == [b, a, c],
+           "dropping a tile on its very next neighbour moves it past that neighbour")
+
+        ui._reorder_apps([b, a, c], [c], a)
+        ok([r["id"] for r in sorted(store.state()["apps"], key=lambda r: r["order"])] == [b, c, a],
+           "and dropping on the previous neighbour moves it back, in one step either way")
+
+
 def test_ui_sets():
     try:
         from app.ui.app import CenturioUI  # noqa: F401
