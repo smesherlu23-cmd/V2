@@ -132,6 +132,10 @@ if (-not $NoClean) {
 
 Write-Step 'flet build windows'
 Write-Host 'Первая сборка может занять несколько минут — flet готовит инструменты сборки.'
+# flet build's progress output goes through `rich`, которая печатает
+# символы вроде ● — если консоль не в UTF-8 (частый случай для cp1251/cp1252
+# по умолчанию), сборка падает на UnicodeEncodeError, толком не начавшись.
+$env:PYTHONUTF8 = '1'
 Invoke-Checked 'flet build windows' { flet build windows }
 
 $exePath = Join-Path $root 'build\windows\Centurio.exe'

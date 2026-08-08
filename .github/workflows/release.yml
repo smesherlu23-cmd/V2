@@ -35,6 +35,14 @@ jobs:
         run: python -m pytest -q
 
       - name: flet build windows
+        env:
+          # flet build's progress output goes through `rich`, which writes
+          # box-drawing/bullet characters (e.g. ●); the Windows runner's
+          # console defaults to cp1252, which can't encode those and the
+          # build dies on a UnicodeEncodeError before it does anything.
+          # PYTHONUTF8 forces UTF-8 mode so Python's own stdout/stderr
+          # encoding is used instead of the console's codepage.
+          PYTHONUTF8: "1"
         run: flet build windows
 
       - name: Verify exe
