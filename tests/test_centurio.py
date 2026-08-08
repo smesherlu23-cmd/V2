@@ -2298,6 +2298,44 @@ def test_ui_tile_cache():
            "tiles of removed apps are dropped from the cache")
 
 
+def test_ui_section_holders_dont_flicker():
+    """Обёртка секции (её Row/Container) переживает refresh как есть —
+    иначе Flet видит новый объект на месте старого и перевыкладывает всю
+    секцию целиком, из-за чего мерцали даже плитки, которых изменение не
+    касалось."""
+    try:
+        from app.ui.app import CenturioUI  # noqa: F401
+    except Exception as exc:
+        skip("UI section holder test", exc)
+        return
+
+    with tempfile.TemporaryDirectory() as d:
+        store = Store(os.path.join(d, "data.json"))
+        cat_id = store.state()["categories"][0]["id"]
+        ids = [store.add_app({"name": f"App {i}", "path": f"/bin/app{i}",
+                              "category_id": cat_id})["id"] for i in range(3)]
+        ui, _ = _ui_for(store)
+
+        key = ("grid", cat_id)
+        holder = ui.grid._section_holders[key]
+        row_before = holder.content
+        tiles_before = list(row_before.controls)
+
+        store.update_app(ids[0], {"favorite": True})
+        ui.refresh()
+
+        ok(ui.grid._section_holders[key] is holder,
+           "the section's own wrapper container is reused, not rebuilt")
+        ok(ui.grid._section_holders[key].content is row_before,
+           "so is its Row — Flet only has to diff its list of children")
+        ok(row_before.controls[0] is not tiles_before[0], "the changed tile is rebuilt")
+        ok(row_before.controls[1] is tiles_before[1] and row_before.controls[2] is tiles_before[2],
+           "but its untouched neighbours are the very same objects — nothing to redraw there")
+
+        gone_key = ("grid", "no-such-category")
+        ok(gone_key not in ui.grid._section_holders, "sanity: unrelated keys are never created")
+
+
 def test_ui_skips_work_while_hidden():
     """Спрятанное окно не перерисовывается — работа копится до возврата."""
     try:
