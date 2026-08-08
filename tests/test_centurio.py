@@ -581,11 +581,8 @@ def test_store_load_validation():
         cats = [c for c in state["categories"] if isinstance(c, dict)]
         ok([c.get("id") for c in cats] == ["work", "dup"],
            "unusable categories are dropped and ids deduped")
-        from app.core.store.sanitize import UI_DEFAULTS_VERSION
-        expected = {**DEFAULT_SETTINGS, "ui_defaults_version": UI_DEFAULTS_VERSION}
-        ok(state["settings"] == expected,
-           "settings that aren't an object fall back to the defaults "
-           "(migrated to the current ui_defaults_version, same as a fresh install)")
+        ok(state["settings"] == dict(DEFAULT_SETTINGS),
+           "settings that aren't an object fall back to the defaults")
         ok(state["version"] == 3, "the loaded file reports the current schema version")
         ok(state["sets"] == [] and state["inbox"] == [],
            "a file written before sets and triage existed loads with both empty")
@@ -2041,7 +2038,6 @@ def test_ui_single_screen_layout():
 
     with tempfile.TemporaryDirectory() as d:
         store = Store(os.path.join(d, "data.json"))
-        store.set_setting("calm", False)  # this test is about the fuller, non-calm chrome
         store.add_app({"name": "Notion", "path": "/x/notion.exe", "category_id": "work",
                        "quick": True, "favorite": True})
         chrome = store.add_app({"name": "Chrome", "path": "/x/chrome.exe",
@@ -2459,7 +2455,6 @@ def test_ui_inbox_badge_and_triage():
 
     with tempfile.TemporaryDirectory() as d:
         store = Store(os.path.join(d, "data.json"))
-        store.set_setting("calm", False)
         ui, _ = _ui_for(store)
 
         ok(not any("12" in t for t in _texts(ui.rail_container)),
@@ -2750,7 +2745,6 @@ def test_ui_sets():
 
     with tempfile.TemporaryDirectory() as d:
         store = Store(os.path.join(d, "data.json"))
-        store.set_setting("calm", False)
         ids = [store.add_app({"name": n, "path": f"/x/{n}", "category_id": "work"})["id"]
                for n in ("VS Code", "Notion")]
         ui, page = _ui_for(store)
@@ -2879,7 +2873,6 @@ def test_ui_bulk_operations():
 
     with tempfile.TemporaryDirectory() as d:
         store = Store(os.path.join(d, "data.json"))
-        store.set_setting("calm", False)
         ids = [store.add_app({"name": n, "path": f"/x/{n}", "category_id": "work"})["id"]
                for n in ("A", "B", "C", "D")]
         ui, page = _ui_for(store)
@@ -2977,7 +2970,6 @@ def test_ui_quick_numbers_match_the_hotkeys():
 
     with tempfile.TemporaryDirectory() as d:
         store = Store(os.path.join(d, "data.json"))
-        store.set_setting("calm", False)
         ids = [store.add_app({"name": n, "path": f"/x/{n}", "quick": True})["id"]
                for n in ("Notion", "Figma")]
         ui, _ = _ui_for(store)
@@ -3228,11 +3220,8 @@ def test_ui_category_popover():
 
 
 def test_ui_calm_mode():
-    """Спокойный вид — теперь основной режим. Он всё ещё прячет чистые
-    подсказки клавиш и часть счётчиков, но больше не трогает пути, хоткеи,
-    источники находок и то, сколько программ найдено/ждёт в разборе."""
+    """Один флаг убирает счётчики, пути, номера мест и подсказки."""
     try:
-        from app.platform import discovery
         from app.ui.app import CenturioUI  # noqa: F401
     except Exception as exc:
         skip("UI calm-mode test", exc)
@@ -3242,12 +3231,8 @@ def test_ui_calm_mode():
 
     with tempfile.TemporaryDirectory() as d:
         store = Store(os.path.join(d, "data.json"))
-        ok(store.settings()["calm"] is True, "calm is the default for a fresh install")
-
         app_id = store.add_app({"name": "Notion", "path": r"C:\Program Files\Notion\N.exe",
                                 "category_id": "work", "quick": True})["id"]
-        other_id = store.add_app({"name": "Figma", "path": r"C:\pf\Figma.exe",
-                                  "category_id": "work"})["id"]
         store.mark_launched(app_id)
         ui, _ = _ui_for(store)
         ui.view.select_one(app_id)
@@ -3259,99 +3244,22 @@ def test_ui_calm_mode():
                     + _texts(ft.Column(ui.content_col.controls))
                     + _texts(ui.inspector_container))
 
+        loud = everything()
+        ok(any(t.startswith("C:\\") for t in loud), "the path is normally shown")
+        ok("Ctrl+1…9" in loud, "so are the key hints")
+        ok("Ctrl+Пробел" in loud, "and the badge in the search field")
+
+        store.set_setting("calm", True)
+        ui.refresh()
         quiet = everything()
-        ok("Ctrl+1" in quiet, "item 1: the tile's own hotkey still shows")
-        ok(any(t.startswith("C:\\") for t in quiet),
-           "item 2: the inspector's technical block (path) is untouched")
-        ok(any("Сейчас место" in t for t in quiet),
-           "item 3: and its quick-launch slot note")
-        ok("Ctrl+1…9" not in quiet, "but the quick-row key-hint legend stays gone (group 1)")
-        ok("Notion" in quiet, "the name was of course never hidden either way")
+        ok(not any(t.startswith("C:\\") for t in quiet), "calm mode drops the paths")
+        ok("Ctrl+1…9" not in quiet, "and the key hints")
+        ok("Ctrl+Пробел" not in quiet, "and the badge")
+        ok("Notion" in quiet, "but never the name of the program")
 
         ui._open_palette()
-        palette = _texts(ui.palette_layer)
-        ok(any("Работа" in t or "назад" in t for t in palette),
-           "item 4: a palette row still carries its category/last-launched subtitle")
-        ok(not any("выбрать" in t for t in palette),
-           "but the palette's own key-hint footer is a pure hint — still gone")
-        ui._close_palette()
-
-        ui.set_ops.make_set([app_id, other_id])
-        rec = store.state()["sets"][0]
-        set_accel = ui._set_accels.get(rec["id"])
-        ok(set_accel and set_accel in _texts(ft.Column(ui.content_col.controls)),
-           "item 5: a set's own hotkey shows on its screen")
-        ui.view.close_set()
-        ui.refresh()
-
-        found = [{"name": "OBS Studio", "path": "C:/pf/obs64.exe", "source": "startmenu"}]
-        real_discover, real_backfill = discovery.discover_apps, discovery.backfill_icons
-        try:
-            discovery.discover_apps = (
-                lambda icon_cache=None, on_progress=None, report=None: list(found))
-            discovery.backfill_icons = lambda *a, **kw: False
-            import threading as _threading
-            before = set(_threading.enumerate())
-            ui.open_add()
-            ok(_settle_threads(before), "the scan thread finishes")
-            ui.refresh()
-            add_screen = _texts(ft.Column(ui.content_col.controls))
-            ok(any("компьютере" in t for t in add_screen),
-               "group 2: «сколько найдено» stays on the Add screen's header")
-            ok("C:/pf/obs64.exe" in add_screen,
-               "item 6: and a found row's own path/status line")
-        finally:
-            discovery.discover_apps, discovery.backfill_icons = real_discover, real_backfill
-
-        store.queue_inbox([{"name": "Krita", "path": "C:/krita.exe", "source": "startmenu"}])
-        ui.refresh()
-        ok(any("1" in t for t in _texts(ui.rail_container)),
-           "group 2: «сколько в разборе» — the rail badge — stays visible")
-        ui.open_triage()
-        triage_screen = _texts(ui.content_col.controls[0])
-        ok(any("Осталось" in t for t in triage_screen),
-           "group 2: and the in-screen «Осталось N · разобрано M» count")
-        ok("Меню «Пуск»" in triage_screen, "item 7: as does the item's source")
-        footer = _find_control(ui.content_col.controls[0],
-                               lambda c: isinstance(c, ft.Container) and c.height == 52)
-        ok(footer is not None and footer.visible is not False,
-           "item 7: and the triage key-legend footer is not force-hidden")
-
-        ui.view.set_screen("grid")
-        store.set_setting("calm", False)
-        ui.refresh()
-        loud = everything()
-        ok("Ctrl+1…9" in loud, "turning calm off restores the pure hints too")
-
-
-def test_ui_defaults_migration():
-    """Existing users had calm:false written to disk under the old default —
-    flipping DEFAULT_SETTINGS alone would never reach them. A one-time
-    version bump forces the new default in, once, without stomping on a
-    deliberate later choice to turn it back off."""
-    import json
-
-    from app.core.store.sanitize import UI_DEFAULTS_VERSION
-
-    with tempfile.TemporaryDirectory() as d:
-        path = os.path.join(d, "data.json")
-        with open(path, "w", encoding="utf-8") as fh:
-            json.dump({"version": 3, "apps": [], "categories": [],
-                      "settings": {"calm": False}}, fh)
-        s = Store(path)
-        ok(s.settings()["calm"] is True,
-           "an old file with calm:false explicitly stored still migrates to true")
-        ok(s.settings()["ui_defaults_version"] == UI_DEFAULTS_VERSION,
-           "and is marked as migrated")
-
-        reloaded = Store(path)
-        ok(reloaded.settings()["calm"] is True,
-           "the migration was persisted — it does not need to re-run every launch")
-
-        reloaded.set_setting("calm", False)
-        again = Store(path)
-        ok(again.settings()["calm"] is False,
-           "a deliberate later choice to turn it back off is not overwritten again")
+        ok(not any("выбрать" in t for t in _texts(ui.palette_layer)),
+           "the hint line under the palette goes quiet too")
 
 
 def test_ui_search_palette():
@@ -3364,7 +3272,6 @@ def test_ui_search_palette():
 
     with tempfile.TemporaryDirectory() as d:
         store = Store(os.path.join(d, "data.json"))
-        store.set_setting("calm", False)
         code = store.add_app({"name": "VS Code", "path": "/x/code.exe",
                               "category_id": "dev", "quick": True})["id"]
         other = store.add_app({"name": "Notion", "path": "/x/n.exe",
