@@ -86,7 +86,7 @@ def _palette_app_row(ui, row):
         for text, hit in queries.match_spans(app["name"], ui.view.query)
     ], size=14, weight=ft.FontWeight.W_500, color=C.WHITE if active else C.TEXT,
         max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)]
-    if sub and not ui.calm():
+    if sub:
         lines.append(T(sub, size=11, color=C.MUTED if active else C.MUTED_2,
                        max_lines=1, overflow=ft.TextOverflow.ELLIPSIS))
     plate = ui.icon_slot(app, 32, 9, glyph=17,
@@ -107,10 +107,9 @@ def _palette_set_row(ui, row):
     lines = [T(rec["name"], size=14, weight=ft.FontWeight.W_500,
                color=C.WHITE if active else C.TEXT, max_lines=1,
                overflow=ft.TextOverflow.ELLIPSIS)]
-    if not ui.calm():
-        lines.append(T(queries.set_palette_sub(rec, row["members"]), size=11,
-                       color=C.MUTED if active else C.MUTED_2, max_lines=1,
-                       overflow=ft.TextOverflow.ELLIPSIS))
+    lines.append(T(queries.set_palette_sub(rec, row["members"]), size=11,
+                   color=C.MUTED if active else C.MUTED_2, max_lines=1,
+                   overflow=ft.TextOverflow.ELLIPSIS))
     return _palette_row(ui, row["index"], Wg.set_slot(32, 9, 16), lines, right,
                         lambda r=row: ui.palette_click(r))
 

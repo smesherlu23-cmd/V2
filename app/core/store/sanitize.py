@@ -37,7 +37,7 @@ DEFAULT_SETTINGS = {
     "launch_hotkey": DEFAULT_LAUNCH_HOTKEY,
     "hide_after": True,
     "triage": True,
-    "calm": False,
+    "calm": True,
     "hints": True,
     "debug_log": False,
     "collapsed": [],
