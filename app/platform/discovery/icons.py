@@ -32,7 +32,7 @@ def resolve_icon_for(path: str, icon_cache: str | None = None) -> tuple[str | No
         # игры, как для обычных программ. Обложку (capsule/header) сюда не
         # берём: это не иконка, а постер для неё — отдельно, в poster_for().
         if os.name == "nt" and icon_cache:
-            exe = steam_paths.steam_exe_full_path_for(path, icon_cache)
+            exe = steam_paths.steam_icon_exe_for(path)
             if exe and os.path.exists(exe):
                 try:
                     icon = windows._win_extract_one(exe, icon_cache)
@@ -103,7 +103,7 @@ def prune_icon_cache(store, icon_cache: str | None = None,
         log.info("кэш иконок: удалено осиротевших файлов: %d", removed)
     return removed
 
-ICON_SCHEMA = 8
+ICON_SCHEMA = 9
 
 def backfill_icons(store, icon_cache: str | None = None, refresh: bool = False) -> bool:
     changed = False
