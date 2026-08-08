@@ -46,7 +46,8 @@ def _add_header(ui):
         border=ft.border.all(1, C.LINE_4), border_radius=8,
         alignment=ft.alignment.center,
         on_click=None if ui.scan.scanning() else (lambda e: ui.scan.start_scan(force=True)))
-    return _screen_header("Найти и добавить", subtitle, ui.back_to_grid, extra=[rescan])
+    return _screen_header("Найти и добавить", subtitle if not ui.calm() else None,
+                          ui.back_to_grid, extra=[rescan])
 
 
 def _add_search_field(ui, state):
@@ -256,7 +257,7 @@ def _add_row(ui, row):
                 ft.Column([
                     T(row["name"], size=13, weight=ft.FontWeight.W_600, color=C.TEXT,
                       max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
-                    T(sub, size=10.5, color=C.MUTED_2, max_lines=1,
+                    T("" if ui.calm() else sub, size=10.5, color=C.MUTED_2, max_lines=1,
                       overflow=ft.TextOverflow.ELLIPSIS,
                       font_family="monospace" if sub is row["path"] else None),
                 ], spacing=1, expand=True, tight=True)]
