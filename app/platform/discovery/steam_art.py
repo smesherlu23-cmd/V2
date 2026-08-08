@@ -1,21 +1,11 @@
 from __future__ import annotations
 
-import glob
 import os
 import re
 import threading
 
 from ...infra import log
 from . import steam_paths
-
-_STEAM_ART_NAMES = (
-    "capsule_616x353.jpg",
-    "header.jpg",
-    "library_hero.jpg",
-    "capsule_231x87.jpg",
-)
-
-_STEAM_PORTRAIT_HINTS = ("600x900", "library_600x900", "portrait")
 
 _STEAM_CDN_HOSTS = ("cdn.cloudflare.steamstatic.com", "cdn.akamai.steamstatic.com")
 
@@ -111,29 +101,23 @@ def _steam_logo(cache: str, sub: str, appid: str) -> str | None:
     return None
 
 def _steam_icon(root: str, appid: str, icon_cache: str | None = None) -> tuple[str | None, str]:
-
+    """The small square icon Steam itself shows in its library list — never
+    the capsule/header/hero cover art. That art is for posters: it's a wide
+    or tall photo, and forcing it into an icon-sized square just crops it
+    down to an unrecognisable sliver. Posters are fetched separately by
+    poster_for(), so an icon that can't find a real small one stays empty
+    (a neutral placeholder glyph) rather than borrowing the wrong image."""
     cache = os.path.join(root, "appcache", "librarycache")
     sub = os.path.join(cache, str(appid))
-    for name in _STEAM_ART_NAMES:
-        for p in (os.path.join(cache, f"{appid}_{name}"), os.path.join(sub, name)):
-            if os.path.exists(p):
-                return p, "cover"
-    if os.path.isdir(sub):
-        imgs = glob.glob(os.path.join(sub, "*.jpg")) + glob.glob(os.path.join(sub, "*.png"))
-        art = [p for p in imgs if os.path.isfile(p) and not any(
-            k in os.path.basename(p).lower()
-            for k in ("icon", "logo", *_STEAM_PORTRAIT_HINTS))]
-        if art:
-            return max(art, key=lambda p: os.path.getsize(p)), "cover"
-    dl = _steam_cdn_art(appid, icon_cache)
-    if dl:
-        return dl, "cover"
-    logo = _steam_logo(cache, sub, appid)
-    if logo:
-        return logo, "logo"
     icon = os.path.join(cache, f"{appid}_icon.jpg")
     if os.path.exists(icon):
         return icon, "contain"
+    icon = os.path.join(sub, "icon.jpg")
+    if os.path.exists(icon):
+        return icon, "contain"
+    logo = _steam_logo(cache, sub, appid)
+    if logo:
+        return logo, "logo"
     return None, "contain"
 
 _STEAM_PORTRAIT_NAMES = ("library_600x900_2x.jpg", "library_600x900.jpg")
