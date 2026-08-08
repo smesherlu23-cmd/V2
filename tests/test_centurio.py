@@ -1381,8 +1381,12 @@ def test_discovery():
         ok(not remaining, f"{name}: all placeholders substituted")
 
     for fn in ("Best-Exe", "Get-StartApps", "Save-StoreIcon", "Resolve-StoreAsset", "Add-Store",
-              "Get-LogoAttr"):
+              "Get-LogoAttr", "Get-Pkg", "Note-StoreFail"):
         ok(fn in discovery._WIN_PS, f"_WIN_PS defines/calls {fn}")
+    ok("-AllUsers" in discovery._WIN_PS,
+       "a per-user Get-AppxPackage miss gets a second, -AllUsers try")
+    ok("Import-Module Appx" in discovery._WIN_PS,
+       "the Appx module is loaded explicitly, in case autoloading is off")
 
     ok(discovery.store_parts("shell:AppsFolder\\Contoso.App_8wekyb3d8bbwe!App")
        == ("Contoso.App_8wekyb3d8bbwe", "App"), "store_parts splits family and appId on '!'")

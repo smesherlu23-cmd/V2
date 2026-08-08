@@ -138,21 +138,34 @@ function Get-LogoAttr($text,$attr){
   if($m.Success){ return $m.Groups[1].Value }
   return $null
 }
+try{ Import-Module Appx -ErrorAction SilentlyContinue -Verbose:$false } catch {}
+$script:StoreFails=0
+function Note-StoreFail($family,$why){
+  $script:StoreFails++
+  if($script:StoreFails -le 5){ [Console]::Error.WriteLine("StoreIcon: $family : $why") }
+}
+function Get-Pkg($family){
+  $pkg=Get-AppxPackage -PackageFamilyName $family -ErrorAction SilentlyContinue | Select-Object -First 1
+  if($pkg){ return $pkg }
+  try{ $pkg=Get-AppxPackage -AllUsers -PackageFamilyName $family -ErrorAction SilentlyContinue | Select-Object -First 1 }catch{ $pkg=$null }
+  return $pkg
+}
 function Save-StoreIcon($family,$appId){
   if(-not $cache -or -not $family){ return $null }
   $f=Join-Path $cache ((Md5 "store:$family!$appId")+'_store.png')
   if(Test-Path -LiteralPath $f){ return $f }
   try{
-    $pkg=Get-AppxPackage -PackageFamilyName $family -ErrorAction SilentlyContinue | Select-Object -First 1
-    if(-not $pkg -or -not $pkg.InstallLocation){ return $null }
+    $pkg=Get-Pkg $family
+    if(-not $pkg -or -not $pkg.InstallLocation){ Note-StoreFail $family 'Get-AppxPackage вернул пусто'; return $null }
     $manifestPath=Join-Path $pkg.InstallLocation 'AppxManifest.xml'
-    if(-not (Test-Path -LiteralPath $manifestPath)){ return $null }
+    if(-not (Test-Path -LiteralPath $manifestPath)){ Note-StoreFail $family "нет доступа к $manifestPath"; return $null }
     $text=Get-Content -LiteralPath $manifestPath -Raw
     $logoRel=$null
     if($appId){
       $esc=[regex]::Escape($appId)
       $block=[regex]::Match($text,"<Application[^>]*Id=`"$esc`"[^>]*>.*?</Application>",
-                            [System.Text.RegularExpressions.RegexOptions]::Singleline)
+                            [System.Text.RegularExpressions.RegexOptions]::Singleline -bor
+                            [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
       if($block.Success){
         $logoRel=Get-LogoAttr $block.Value 'Square150x150Logo'
         if(-not $logoRel){ $logoRel=Get-LogoAttr $block.Value 'Square44x44Logo' }
@@ -164,12 +177,12 @@ function Save-StoreIcon($family,$appId){
       $m=[regex]::Match($text,'<Logo>([^<]+)</Logo>')
       if($m.Success){ $logoRel=$m.Groups[1].Value }
     }
-    if(-not $logoRel){ return $null }
+    if(-not $logoRel){ Note-StoreFail $family 'манифест без Logo/Square*Logo'; return $null }
     $src=Resolve-StoreAsset $pkg.InstallLocation $logoRel
-    if(-not $src){ return $null }
+    if(-not $src){ Note-StoreFail $family "не нашёл файл ассета для $logoRel"; return $null }
     Copy-Item -LiteralPath $src -Destination $f -Force
     return $f
-  }catch{ return $null }
+  }catch{ Note-StoreFail $family $_.Exception.Message; return $null }
 }
 '''
 
