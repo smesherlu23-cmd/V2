@@ -4,7 +4,7 @@ import flet as ft
 
 from . import colors as C
 from .format import T, cat_icon
-from .images import icon_image, is_launcher_art
+from .images import icon_image
 
 
 def safe_update(control) -> None:
@@ -154,10 +154,18 @@ def cat_glyph(cat, size=19, color=None, fill: int | None = None):
     return ft.Icon(cat_icon(cat_glyph_name(cat)), size=size, color=col)
 
 
+_FIT_BY_KIND = {"cover": ft.ImageFit.COVER, "logo": ft.ImageFit.CONTAIN,
+                "contain": ft.ImageFit.CONTAIN}
+
+
 def icon_slot(app, size: int, radius: int, glyph: int | None = None,
               border=None, glyph_color=None, bgcolor=None, cat=None,
               source_glyph: str = "folder"):
-    fit = ft.ImageFit.COVER if is_launcher_art(app) else ft.ImageFit.CONTAIN
+    # Иконка приложения из Steam иногда — это на самом деле широкая обложка
+    # (capsule/header), а иногда честная квадратная иконка: какая досталась,
+    # решалось при добавлении и записано в icon_fit. Обрезать «cover»-ом
+    # надо только первую — вторую он портит, срезая края квадрата.
+    fit = _FIT_BY_KIND.get(app.get("icon_fit"), ft.ImageFit.CONTAIN)
     inner = icon_image(app.get("icon"), width=size - 8, height=size - 8, fit=fit)
     if inner is None:
         name = cat_glyph_name(cat) if cat else source_glyph

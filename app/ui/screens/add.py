@@ -241,23 +241,10 @@ def _add_row(ui, row):
                       size=18, color=C.ACCENT if checked else C.MUTED)
 
     item = row["item"]
-    sub = row["path"]
-    if not row["is_new"]:
-        cat = next((c for c in ui.categories()
-                    if any(a.get("category_id") == c["id"] and
-                           (a.get("path") or "").lower() == row["key"] for a in ui.apps())), None)
-        sub = "уже в библиотеке" + (f" · {cat['name']}" if cat else "")
-    elif item.get("sub"):
-        sub = f"{item['sub']} · обложка найдена" if item.get("poster") else item["sub"]
 
     controls = [box, ui.icon_slot(item, 30, 8, glyph=16),
-                ft.Column([
-                    T(row["name"], size=13, weight=ft.FontWeight.W_600, color=C.TEXT,
-                      max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
-                    T(sub, size=10.5, color=C.MUTED_2, max_lines=1,
-                      overflow=ft.TextOverflow.ELLIPSIS,
-                      font_family="monospace" if sub is row["path"] else None),
-                ], spacing=1, expand=True, tight=True)]
+                T(row["name"], size=13, weight=ft.FontWeight.W_600, color=C.TEXT,
+                  max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True)]
 
     if row["is_new"]:
         cat_id = ui.scan.add_category_for(row)

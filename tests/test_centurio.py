@@ -3294,8 +3294,9 @@ def test_ui_calm_mode():
             add_screen = _texts(ft.Column(ui.content_col.controls))
             ok(any("компьютере" in t for t in add_screen),
                "group 2: «сколько найдено» stays on the Add screen's header")
-            ok("C:/pf/obs64.exe" in add_screen,
-               "item 6: and a found row's own path/status line")
+            ok("C:/pf/obs64.exe" not in add_screen,
+               "item 6: a found row no longer prints its path/status line at all")
+            ok("OBS Studio" in add_screen, "just the name and its category")
         finally:
             discovery.discover_apps, discovery.backfill_icons = real_discover, real_backfill
 
@@ -3606,6 +3607,37 @@ def test_ui_icons_are_never_letters():
 
         ok("initials" not in _read("app", "ui", "app.py"),
            "nothing in the window draws a letter placeholder any more")
+
+
+def test_ui_icon_slot_respects_stored_fit():
+    """A Steam app's «icon» field is sometimes a wide capsule/header image and
+    sometimes a genuinely square one — which one it got is recorded in
+    icon_fit. The slot must go by that, not just by «came from Steam», or a
+    square icon gets cover-cropped for no reason."""
+    try:
+        import flet as ft
+
+        from app.ui.app import CenturioUI  # noqa: F401
+    except Exception as exc:
+        skip("UI icon-fit test", exc)
+        return
+
+    with tempfile.TemporaryDirectory() as d:
+        store = Store(os.path.join(d, "data.json"))
+        icon_png = iconify.generate_icon(os.path.join(d, "square.png"), 32)
+        square = store.add_app({"name": "Square Game", "path": "steam://rungameid/1",
+                                "icon": str(icon_png), "icon_fit": "contain"})
+        wide = store.add_app({"name": "Capsule Game", "path": "steam://rungameid/2",
+                              "icon": str(icon_png), "icon_fit": "cover"})
+        ui, _ = _ui_for(store)
+
+        square_slot = ui.icon_slot(store.get_app(square["id"]), 60, 16)
+        ok(square_slot.content.fit == ft.ImageFit.CONTAIN,
+           "a Steam app whose icon is a real square one is not cover-cropped")
+
+        wide_slot = ui.icon_slot(store.get_app(wide["id"]), 60, 16)
+        ok(wide_slot.content.fit == ft.ImageFit.COVER,
+           "one whose icon is capsule/header art still fills the slot as before")
 
 
 def test_ui_settings_screen():
