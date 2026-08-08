@@ -103,7 +103,7 @@ def prune_icon_cache(store, icon_cache: str | None = None,
         log.info("кэш иконок: удалено осиротевших файлов: %d", removed)
     return removed
 
-ICON_SCHEMA = 7
+ICON_SCHEMA = 8
 
 def backfill_icons(store, icon_cache: str | None = None, refresh: bool = False) -> bool:
     changed = False
@@ -112,7 +112,12 @@ def backfill_icons(store, icon_cache: str | None = None, refresh: bool = False) 
         path = app.get("path") or ""
         if refresh or not app.get("icon"):
             icon, fit = resolve_icon_for(path, icon_cache)
-            if icon and (icon != app.get("icon") or fit != app.get("icon_fit")):
+            # On a refresh, a re-resolve that now comes up empty still has to
+            # win over a stale icon — e.g. one recorded back when a Steam
+            # game's "icon" could be capsule/header art, since discarded.
+            # Anything short of a forced refresh only ever fills a gap, never
+            # clears a value that's already there.
+            if icon != app.get("icon") or (icon and fit != app.get("icon_fit")):
                 patch["icon"] = icon
                 patch["icon_fit"] = fit
         if not (app.get("sub") or "").strip():
