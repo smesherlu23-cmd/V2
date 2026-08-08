@@ -211,14 +211,35 @@ class GridView:
             self.ui._tile_cache.move_to_end(app_id)
             return hit[1]
         compact = self.ui._settings.get("tile_size") == "compact"
-        base = (self._build_poster_tile(a, compact, running, selected, ids)
+        box = {}
+        base = (self._build_poster_tile(a, compact, running, selected, ids, box)
                 if self._use_poster(a) else
-                self._build_tile(a, compact, running, selected, ids))
-        tile = ft.Draggable(group="apps", content=base,
-                            data={"ids": self.ui._drag_ids(app_id)})
+                self._build_tile(a, compact, running, selected, ids, box))
+        draggable = ft.Draggable(group="apps", content=base,
+                                 data={"ids": self.ui._drag_ids(app_id)})
+        tile = ft.DragTarget(
+            group="apps", content=draggable,
+            on_accept=lambda e, i=app_id, sec_ids=ids, b=box: self._accept_reorder(e, i, sec_ids, b),
+            on_will_accept=lambda e, b=box: self._mark_reorder(b, True),
+            on_leave=lambda e, b=box: self._mark_reorder(b, False))
         self.ui._tile_cache[app_id] = (sig, tile)
         self.ui._tile_cache.move_to_end(app_id)
         return tile
+
+    def _mark_reorder(self, box, on: bool):
+        ctl = box.get("tile")
+        if ctl is None:
+            return
+        ctl.border = ft.border.all(2, self.ui._accent()) if on else box.get("border")
+        Wg.safe_update(ctl)
+
+    def _accept_reorder(self, e, target_id, section_ids, box):
+        self._mark_reorder(box, False)
+        src = self.ui.page.get_control(e.src_id)
+        payload = getattr(src, "data", None) if src is not None else None
+        if not isinstance(payload, dict) or not payload.get("ids"):
+            return
+        self.ui._reorder_apps(section_ids, list(payload["ids"]), target_id)
 
     def _tile_meta(self, app, cat) -> str:
         if self.ui.calm():
@@ -254,7 +275,7 @@ class GridView:
                                       right=9, top=9, tooltip="В избранном"))
         return marks
 
-    def _build_tile(self, a, compact, running, selected, ids):
+    def _build_tile(self, a, compact, running, selected, ids, box=None):
         width = C.TILE_W_COMPACT if compact else C.TILE_W
         cover_h = C.TILE_COVER_H_COMPACT if compact else C.TILE_COVER_H
         slot = C.TILE_SLOT_COMPACT if compact else C.TILE_SLOT
@@ -290,6 +311,9 @@ class GridView:
             border=ft.border.all(2, self.ui._accent()) if selected else ft.border.all(1, C.LINE),
             border_radius=14, clip_behavior=ft.ClipBehavior.HARD_EDGE,
         )
+        if box is not None:
+            box["tile"] = tile
+            box["border"] = tile.border
 
         def on_hover(e):
             if selected:
@@ -301,7 +325,7 @@ class GridView:
         tile.on_hover = on_hover
         return self._tile_gestures(tile, a, ids)
 
-    def _build_poster_tile(self, a, compact, running, selected, ids):
+    def _build_poster_tile(self, a, compact, running, selected, ids, box=None):
         width = C.POSTER_W_COMPACT if compact else C.POSTER_W
         height = C.POSTER_H_COMPACT if compact else C.POSTER_H
         poster = ft.Image(src_base64=img_b64(a.get("poster")), width=width, height=height,
@@ -319,6 +343,9 @@ class GridView:
             ft.Stack(children), width=width, height=height, bgcolor=C.PANEL,
             border=ft.border.all(2, self.ui._accent()) if selected else ft.border.all(1, C.LINE),
             border_radius=12, clip_behavior=ft.ClipBehavior.HARD_EDGE)
+        if box is not None:
+            box["tile"] = tile
+            box["border"] = tile.border
 
         def on_hover(e):
             if selected:
