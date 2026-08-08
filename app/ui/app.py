@@ -854,6 +854,19 @@ class CenturioUI:
         self.store.reorder_categories(ids)
         self.refresh()
 
+    def _reorder_apps(self, section_ids, dragged_ids, target_id):
+        dragged = [i for i in dragged_ids if i in section_ids]
+        if not dragged or target_id in dragged:
+            return
+        order = [i for i in section_ids if i not in dragged]
+        if target_id not in order:
+            return
+        order[order.index(target_id):order.index(target_id)] = dragged
+        self.store.reorder_apps(order)
+        if self.view.sort != "manual":
+            self.view.set_sort("manual")
+        self.refresh()
+
     def _open_popover(self, cat_id):
         self.view.open_popover(cat_id)
         self.refresh()

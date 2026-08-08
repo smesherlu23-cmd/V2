@@ -2572,6 +2572,23 @@ def test_ui_delete_is_undone_not_confirmed():
         ok(all(store.get_app(i)["category_id"] == "work" for i in ids),
            "and is undoable too")
 
+        ui._reorder_apps(ids, [ids[1]], ids[0])
+        ok(store.get_app(ids[1])["order"] < store.get_app(ids[0])["order"],
+           "dragging one tile onto another moves it in front")
+        ok(ui.view.sort == "manual",
+           "and switches sorting to manual so the new order is actually visible")
+
+        # Та же ручка, что и настоящая плитка использует: DragTarget вокруг
+        # неё принимает {"ids": [...]} из перетаскиваемой плитки.
+        ui.view.set_sort("alpha")
+        dragged = types_ns(data={"ids": [ids[0]]})
+        page.get_control = lambda _id, ctl=dragged: ctl
+        ui.grid._accept_reorder(types_ns(src_id=1), ids[1], [ids[1], ids[0]], {})
+        ok(store.get_app(ids[0])["order"] < store.get_app(ids[1])["order"],
+           "the grid's own drop handler reorders tiles the same way")
+        ok(ui.view.sort == "manual", "and flips sorting to manual too")
+        page.get_control = lambda _id: None
+
         ui._remove_category(cat["id"])
         ok(not any(c["id"] == cat["id"] for c in store.state()["categories"]),
            "a category goes without a confirmation")
