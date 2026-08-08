@@ -1871,18 +1871,27 @@ def test_log():
     importlib.reload(_log)
     import logging
     with tempfile.TemporaryDirectory() as d:
-        _log.setup(debug=True, log_dir=d)
-        _log._LOGGER.handlers = [h for h in _log._LOGGER.handlers
-                                 if isinstance(h, logging.FileHandler)]
         try:
-            raise ValueError("boom")
-        except ValueError:
-            _log.exception("handled test error")
-        _log.debug("a debug line")
-        ok(os.path.exists(os.path.join(d, "centurio.log")), "debug log file created")
-        with open(os.path.join(d, "centurio.log"), encoding="utf-8") as fh:
-            body = fh.read()
-        ok("handled test error" in body and "boom" in body, "exception logged with traceback")
+            _log.setup(debug=True, log_dir=d)
+            _log._LOGGER.handlers = [h for h in _log._LOGGER.handlers
+                                     if isinstance(h, logging.FileHandler)]
+            try:
+                raise ValueError("boom")
+            except ValueError:
+                _log.exception("handled test error")
+            _log.debug("a debug line")
+            ok(os.path.exists(os.path.join(d, "centurio.log")), "debug log file created")
+            with open(os.path.join(d, "centurio.log"), encoding="utf-8") as fh:
+                body = fh.read()
+            ok("handled test error" in body and "boom" in body,
+               "exception logged with traceback")
+        finally:
+            # RotatingFileHandler keeps centurio.log open until closed — POSIX
+            # lets you unlink an open file, but the TemporaryDirectory cleanup
+            # below runs on Windows too, where an open handle blocks deletion.
+            for h in list(_log._LOGGER.handlers):
+                h.close()
+                _log._LOGGER.removeHandler(h)
 
 
 def test_queries():
