@@ -7,7 +7,7 @@
 ; Output:        installer\Output\CenturioSetup.exe
 
 #define MyAppName "Centurio"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.1.1"
 #define MyAppPublisher "Centurio"
 #define MyAppExeName "Centurio.exe"
 ; PyInstaller one-folder output (relative to this script's parent). One-folder

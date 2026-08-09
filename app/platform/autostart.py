@@ -72,7 +72,11 @@ def set_autostart(enabled: bool) -> bool:
     try:
         import winreg
 
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
+        # CreateKeyEx открывает существующий ключ и заводит отсутствующий:
+        # у свежего профиля ветки Run может не быть, и OpenKey на ней падает
+        # с FileNotFoundError, унося с собой всю настройку автозапуска.
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, _RUN_KEY, 0,
+                                winreg.KEY_SET_VALUE) as key:
             if enabled:
                 winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, _launch_command())
             else:
