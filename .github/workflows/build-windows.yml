@@ -36,6 +36,17 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      # flet_cli.commands.build создаёт rich-консоль прямо на импорте модуля:
+      # force_terminal = not FLET_CLI_NO_RICH_OUTPUT. Флаг --no-rich-output
+      # разбирается позже, когда консоль уже построена, поэтому помогает только
+      # переменная. Без неё rich считает пайп раннера терминалом, уходит в
+      # legacy-windows рендер и падает на '●' — UnicodeEncodeError в cp1252.
+      FLET_CLI_NO_RICH_OUTPUT: "true"
+      # Стандартный вывод питона на раннере — cp1252, а юникода в логах хватает
+      # и помимо rich.
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
     defaults:
       run:
         shell: pwsh
