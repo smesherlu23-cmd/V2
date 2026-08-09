@@ -54,6 +54,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ВРЕМЕННО: flutter выбрал генератор «Visual Studio 16 2019» на раннере,
+      # где стоит только 2022, и cmake не нашёл ни одной установки. Смотрим,
+      # что именно отдаёт vswhere — по нему flutter и определяет версию.
+      - name: Диагностика Visual Studio
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          Write-Host "vswhere: $vswhere (есть: $(Test-Path $vswhere))"
+          if (Test-Path $vswhere) {
+            Write-Host '--- все установки ---'
+            & $vswhere -all -prerelease -products * -format json
+            Write-Host '--- то, что требует flutter (NativeDesktop + VC tools) ---'
+            & $vswhere -products * -prerelease `
+              -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+              -requires Microsoft.VisualStudio.Workload.NativeDesktop `
+              -format json
+          }
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
