@@ -5,6 +5,7 @@ import sys
 
 import flet as ft
 
+from app.infra import log
 from app.main import ASSETS_DIR, main
 from app.platform import single_instance
 
@@ -19,6 +20,7 @@ def _notify_already_running():
 
 
 if __name__ == "__main__":
+    log.install_excepthook()
     web = os.environ.get("CENTURIO_WEB") == "1"
     port = int(os.environ.get("CENTURIO_PORT", "0") or 0)
     if not web and not single_instance.acquire():

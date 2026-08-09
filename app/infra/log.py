@@ -51,6 +51,37 @@ def setup(debug: bool | None = None, log_dir: str | Path | None = None) -> loggi
     _configured = True
     return _LOGGER
 
+def install_excepthook() -> None:
+    """Отправить необработанные исключения в лог.
+
+    Собранное приложение живёт без консоли, поэтому исключение, до которого
+    никто не дотянулся, убивает окно вообще без следа: ни текста, ни записи в
+    centurio.log. Логгер настраиваем лениво, прямо в обработчике, — иначе
+    ранний setup() перебил бы тот, что делает main() уже зная настройку
+    debug_log из хранилища.
+    """
+    def _log(exc_type, exc, tb) -> None:
+        try:
+            setup()
+        except Exception:
+            pass
+        _LOGGER.critical("необработанное исключение", exc_info=(exc_type, exc, tb))
+
+    def _hook(exc_type, exc, tb) -> None:
+        _log(exc_type, exc, tb)
+        sys.__excepthook__(exc_type, exc, tb)
+
+    sys.excepthook = _hook
+
+    # Flet зовёт main() в отдельном потоке, туда sys.excepthook не достаёт.
+    import threading
+
+    def _thread_hook(args) -> None:
+        _log(args.exc_type, args.exc_value, args.exc_traceback)
+
+    threading.excepthook = _thread_hook
+
+
 def debug(msg, *args, **kw):
     _LOGGER.debug(msg, *args, **kw)
 
