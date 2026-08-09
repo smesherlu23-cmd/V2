@@ -30,10 +30,6 @@ on:
         type: boolean
   push:
     tags: ["v*"]
-    # ВРЕМЕННО: прогон ветки, чтобы убедиться, что установка из лока с
-    # --require-hashes действительно проходит на Windows. Публикацию не
-    # трогает — она только с тега или ручного запуска. Убрать после проверки.
-    branches: ["claude/build-publish-exe-itwkkz"]
 
 permissions:
   contents: write
