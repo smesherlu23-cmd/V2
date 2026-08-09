@@ -26,9 +26,6 @@ on:
         type: boolean
   push:
     tags: ["v*"]
-    # ВРЕМЕННО: холостой прогон ветки без публикации, чтобы проверить сборку
-    # до того, как появится публичный тег. Убрать после первой зелёной сборки.
-    branches: ["claude/build-publish-exe-itwkkz"]
 
 permissions:
   contents: write
