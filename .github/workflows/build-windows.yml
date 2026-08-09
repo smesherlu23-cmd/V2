@@ -35,13 +35,14 @@ permissions:
 
 jobs:
   build:
-    # Образ закреплён намеренно. windows-latest уехал на windows-2025-vs2026,
-    # где стоит Visual Studio 2026 (major 18). Flutter 3.29.2 знает генераторы
-    # только для 16 (2019) и 17 (2022), на всё остальное молча берёт 2019 —
-    # и cmake падает с «could not find any instance of Visual Studio».
+    # Образ закреплён намеренно. Flutter 3.29.2 знает генераторы cmake только
+    # для Visual Studio 16 (2019) и 17 (2022), на всё остальное молча берёт
+    # 2019 — и cmake падает с «could not find any instance of Visual Studio».
     # Поднять Flutter нельзя: flet 0.28.3 требует ровно 3.29.x и переустановит
-    # любую другую версию. Значит, нужен образ, где старший VS — 2022.
-    runs-on: windows-2025
+    # любую другую версию, так что двигать приходится образ.
+    # И windows-latest (windows-2025-vs2026), и windows-2025 уже приехали с
+    # Visual Studio 2026 — major 18. 2022 остался на windows-2022.
+    runs-on: windows-2022
     env:
       # flet_cli.commands.build создаёт rich-консоль прямо на импорте модуля:
       # force_terminal = not FLET_CLI_NO_RICH_OUTPUT. Флаг --no-rich-output
