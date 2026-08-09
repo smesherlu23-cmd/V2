@@ -42,11 +42,19 @@ python main.py
 Подробности: `Get-Help .\scripts\build_release.ps1 -Full`.
 
 Без Windows под рукой то же самое делает workflow «Build Windows»
-(`.github/workflows/build-windows.yml`) — запускается вручную со вкладки Actions
-или пушем тега `v*`. Он гоняет те же проверки, собирает на `windows-latest`
-установщик `CenturioSetup-<версия>.exe` и портативный одиночный
+(`.github/workflows/build-windows.yml`) — по пушу тега `v*` или вручную со
+вкладки Actions (кнопка появляется только когда workflow есть в `main`: таково
+условие `workflow_dispatch`). Он гоняет те же проверки, собирает установщик
+`CenturioSetup-<версия>.exe` и портативный одиночный
 `Centurio-<версия>-portable.exe` (`flet pack`), после чего прикладывает оба
 к GitHub Release с тегом `v<версия>` и к артефактам прогона.
+
+Собирает он на `windows-2022`, и это не случайность: Flutter 3.29.2 умеет
+генераторы cmake только для Visual Studio 2019 и 2022, а на `windows-latest`
+и `windows-2025` уже стоит Visual Studio 2026. Поднять Flutter нельзя — flet
+0.28.3 требует ровно 3.29.x. Отдельный шаг проверяет версию Visual Studio до
+сборки и падает с объяснением, а не с невнятной ошибкой cmake десять минут
+спустя.
 
 ## Ключи запуска
 
