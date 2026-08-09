@@ -78,10 +78,14 @@ jobs:
           "version=$($match.Matches[0].Groups[1].Value)" >> $env:GITHUB_OUTPUT
 
       - name: Upload exe artifact
+        # The whole build\windows folder, not just Centurio.exe: flet build
+        # windows also drops flutter_windows.dll, a data\ folder and other
+        # DLLs next to the exe that it needs at runtime — shipping the exe
+        # alone means it can't find them and refuses to start.
         uses: actions/upload-artifact@v4
         with:
-          name: Centurio-${{ steps.version.outputs.version }}-exe
-          path: build/windows/Centurio.exe
+          name: Centurio-${{ steps.version.outputs.version }}-portable
+          path: build/windows/
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
