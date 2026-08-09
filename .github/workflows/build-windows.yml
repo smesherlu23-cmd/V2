@@ -26,6 +26,9 @@ on:
         type: boolean
   push:
     tags: ["v*"]
+    # ВРЕМЕННО: холостой прогон ветки без публикации, чтобы проверить сборку
+    # до того, как появится публичный тег. Убрать после первой зелёной сборки.
+    branches: ["claude/build-publish-exe-itwkkz"]
 
 permissions:
   contents: write
@@ -172,7 +175,10 @@ jobs:
           path: release/*
           if-no-files-found: error
 
+      # Публикуем только с тега или ручного запуска: пуш ветки — холостой прогон,
+      # он собирает и складывает артефакты, но релиз не трогает.
       - name: Публикация релиза
+        if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.meta.outputs.tag }}
@@ -208,8 +214,14 @@ jobs:
           ) -join "`n"
           Set-Content -Path 'release-notes.md' -Value $notes -Encoding utf8
 
+          # С ручного запуска решает галка, с тега — суффикс вида v1.2.0-rc1.
+          $prerelease = if ([string]::IsNullOrWhiteSpace($env:PRERELEASE)) {
+            $env:TAG -match '-'
+          } else {
+            $env:PRERELEASE -eq 'true'
+          }
           $extra = @()
-          if ($env:PRERELEASE -eq 'true') { $extra += '--prerelease' }
+          if ($prerelease) { $extra += '--prerelease' }
 
           gh release create $env:TAG @files `
             --target $env:GITHUB_SHA `
