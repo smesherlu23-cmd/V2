@@ -30,6 +30,10 @@ on:
         type: boolean
   push:
     tags: ["v*"]
+    # ВРЕМЕННО: прогон ветки, чтобы убедиться, что установка из лока с
+    # --require-hashes действительно проходит на Windows. Публикацию не
+    # трогает — она только с тега или ручного запуска. Убрать после проверки.
+    branches: ["claude/build-publish-exe-itwkkz"]
 
 permissions:
   contents: write
@@ -60,11 +64,16 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      # Всё, что попадает в сборку, ставится из лока с проверкой sha256: pip
+      # откажется поставить пакет, чей файл не совпал с записанным хешем.
+      # Линтер и pytest в сборку не попадают, поэтому идут отдельной строкой
+      # без хешей — --require-hashes действует на вызов целиком.
       - name: Зависимости
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest ruff "pyinstaller==6.22.0"
+          pip install --require-hashes -r requirements.lock.txt
+          if ($LASTEXITCODE -ne 0) { throw "Установка из лока не прошла ($LASTEXITCODE)." }
+          pip install pytest ruff
 
       - name: Версия и тег
         id: meta

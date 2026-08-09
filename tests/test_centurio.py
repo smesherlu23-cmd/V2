@@ -1297,6 +1297,43 @@ def test_packaging_metadata():
        f"requirements-only: {required - declared})")
 
 
+def test_lockfile_covers_requirements():
+    """Каждая прямая зависимость должна быть в requirements.lock.txt.
+
+    Релиз ставится с --require-hashes из лока, а не из requirements.txt.
+    Добавить зависимость и забыть пересобрать лок — значит собрать релиз без
+    неё; пакет просто не поставится, и это вскроется уже падением сборки.
+    """
+    import re
+
+    def normalize(name: str) -> str:
+        return re.sub(r"[-_.]+", "-", name).lower()
+
+    def direct(text: str) -> set:
+        names = set()
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            # "flet[desktop]==0.28.3" -> "flet"
+            names.add(normalize(re.split(r"[\[<>=!~;]", line)[0].strip()))
+        return names
+
+    lock = _read("requirements.lock.txt")
+    pinned = {normalize(m) for m in re.findall(r"^([A-Za-z0-9._-]+)==", lock, re.M)}
+    ok(pinned, "requirements.lock.txt содержит закреплённые версии")
+
+    wanted = direct(_read("requirements.txt")) | direct(_read("requirements-build.txt"))
+    ok(wanted <= pinned, f"лок покрывает прямые зависимости (нет в локе: {wanted - pinned})")
+
+    # Хеш нужен каждому пакету: с --require-hashes одна строка без него
+    # роняет установку целиком, а не только свой пакет.
+    entries = re.split(r"\n(?=[A-Za-z0-9._-]+==)", lock)
+    unhashed = [entry.split("==", 1)[0] for entry in entries
+                if re.match(r"^[A-Za-z0-9._-]+==", entry) and "--hash=sha256:" not in entry]
+    ok(not unhashed, f"у каждого пакета в локе есть хеш (без хеша: {unhashed})")
+
+
 def test_single_entry_point():
     """app/main.py builds the page; only the root main.py launches it."""
     root_main = _read("main.py")

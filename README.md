@@ -65,6 +65,32 @@ PyInstaller делает такую же папку одним питоном, �
 распаковывает себя в `%TEMP%\_MEIxxxx`, и именно это ловят эвристики
 антивирусов. Пользователю всё равно достаётся один файл — установщик.
 
+### Зафиксированные зависимости
+
+Релиз собирается не из `requirements.txt`, а из `requirements.lock.txt` —
+точных версий с sha256 каждого файла, которые CI ставит через
+`pip install --require-hashes`. Подменённый на PyPI пакет так не установится,
+и две сборки одного коммита дают одинаковый результат; раньше зависимости
+стояли через `>=` и разъезжались от прогона к прогону. В `requirements-build.txt`
+лежит PyInstaller: его загрузчик вшивается в exe, поэтому версия фиксируется
+наравне с зависимостями приложения.
+
+Лок собран под Windows и CPython 3.12 — платформу релиза. Пересобрать после
+правки `requirements.txt` или `requirements-build.txt`:
+
+```bash
+uv pip compile requirements.txt requirements-build.txt \
+    --python-platform x86_64-pc-windows-msvc --python-version 3.12 \
+    --generate-hashes --no-header --output-file requirements.lock.txt
+```
+
+`test_lockfile_covers_requirements` следит, чтобы лок не отстал от списка
+зависимостей и чтобы у каждого пакета был хеш.
+
+Локальная разработка и `scripts\build_release.ps1` по-прежнему ставят обычный
+`requirements.txt`: колёса в локе собраны под cp312 и на другой версии Python
+просто не встанут. Проверяемая по хешам сборка — та, что делает CI.
+
 ## Ключи запуска
 
 | Ключ | Действие |
