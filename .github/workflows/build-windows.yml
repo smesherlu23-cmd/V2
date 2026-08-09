@@ -1,16 +1,20 @@
 name: Build Windows
 
-# Сборка Windows-релиза Centurio. Локальный аналог — scripts\build_release.ps1,
-# но flet build windows и Inno Setup работают только на Windows, поэтому
-# единственный воспроизводимый способ собрать релиз из не-Windows окружения —
-# этот workflow на windows-latest.
+# Сборка Windows-релиза Centurio.
 #
-# Выпускает два файла:
-#   CenturioSetup-<версия>.exe        установщик (flet build windows + Inno Setup)
-#   Centurio-<версия>-portable.exe    один переносимый exe (flet pack / PyInstaller)
+# Собирает PyInstaller'ом в одну папку (`flet pack -D`), проверяет, что
+# собранное вообще запускается, и только потом пакует в установщик Inno Setup
+# и в zip.
 #
-# Оба прикрепляются к GitHub Release с тегом v<версия> и заодно остаются
-# артефактами прогона.
+# Flutter, Visual Studio и CMake тут не нужны: раньше `flet build windows`
+# требовал весь этот тулчейн и пин на образ windows-2022 (на windows-latest
+# уже Visual Studio 2026, генераторов для которой Flutter 3.29.2 не знает),
+# хотя итогом всё равно была папка, которую упаковывает Inno Setup. PyInstaller
+# делает такую же папку одним питоном.
+#
+# Выпускает:
+#   CenturioSetup-<версия>.exe       установщик — один файл, что и отправлять
+#   Centurio-<версия>-portable.zip   та же сборка без установки
 
 on:
   workflow_dispatch:
@@ -26,20 +30,16 @@ on:
         type: boolean
   push:
     tags: ["v*"]
+    # ВРЕМЕННО: холостой прогон ветки, чтобы проверка запуска показала traceback
+    # текущего падения. Публикацию не трогает. Убрать после разбора.
+    branches: ["claude/build-publish-exe-itwkkz"]
 
 permissions:
   contents: write
 
 jobs:
   build:
-    # Образ закреплён намеренно. Flutter 3.29.2 знает генераторы cmake только
-    # для Visual Studio 16 (2019) и 17 (2022), на всё остальное молча берёт
-    # 2019 — и cmake падает с «could not find any instance of Visual Studio».
-    # Поднять Flutter нельзя: flet 0.28.3 требует ровно 3.29.x и переустановит
-    # любую другую версию, так что двигать приходится образ.
-    # И windows-latest (windows-2025-vs2026), и windows-2025 уже приехали с
-    # Visual Studio 2026 — major 18. 2022 остался на windows-2022.
-    runs-on: windows-2022
+    runs-on: windows-latest
     env:
       # flet_cli.commands.build создаёт rich-консоль прямо на импорте модуля:
       # force_terminal = not FLET_CLI_NO_RICH_OUTPUT. Флаг --no-rich-output
@@ -47,8 +47,8 @@ jobs:
       # переменная. Без неё rich считает пайп раннера терминалом, уходит в
       # legacy-windows рендер и падает на '●' — UnicodeEncodeError в cp1252.
       FLET_CLI_NO_RICH_OUTPUT: "true"
-      # Стандартный вывод питона на раннере — cp1252, а юникода в логах хватает
-      # и помимо rich.
+      # Стандартный вывод питона на раннере — cp1252, а юникода хватает и
+      # помимо rich: в логах приложения он весь русский.
       PYTHONUTF8: "1"
       PYTHONIOENCODING: "utf-8"
     defaults:
@@ -57,33 +57,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      # Ту же установку выберет и Flutter: vswhere -latest с теми же
-      # требованиями. Проверяем версию заранее, иначе несовместимость всплывёт
-      # минут через восемь как невнятная ошибка cmake про генератор 2019.
-      - name: Проверить Visual Studio
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          if (-not (Test-Path $vswhere)) { throw "vswhere.exe не найден: $vswhere." }
-
-          $found = & $vswhere -latest -products * `
-            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-            -requires Microsoft.VisualStudio.Workload.NativeDesktop `
-            -format json | ConvertFrom-Json
-          if (-not $found) {
-            throw 'Нет установки Visual Studio с рабочей нагрузкой C++ — Flutter не соберёт windows.'
-          }
-
-          $vs = @($found)[0]
-          $major = [int]($vs.installationVersion.Split('.')[0])
-          Write-Host "$($vs.displayName) — $($vs.installationVersion) (major $major)"
-          if (@(16, 17) -notcontains $major) {
-            throw ("Flutter 3.29.2 знает генераторы cmake только для Visual Studio 16 (2019) и " +
-                   "17 (2022), а здесь major $major. Для всего остального Flutter молча берёт " +
-                   "генератор 2019, и cmake падает с 'could not find any instance of Visual " +
-                   "Studio'. Нужен образ раннера, где старший Visual Studio — 2022.")
-          }
 
       - uses: actions/setup-python@v5
         with:
@@ -94,7 +67,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest ruff pyinstaller
+          pip install pytest ruff "pyinstaller==6.22.0"
 
       - name: Версия и тег
         id: meta
@@ -132,24 +105,68 @@ jobs:
           python -m pytest -q
           if ($LASTEXITCODE -ne 0) { throw "pytest не прошёл ($LASTEXITCODE)." }
 
-      # Flutter собирает windows-приложение с плагинами через симлинки, а они
-      # на Windows требуют режима разработчика. На раннерах он выключен, и без
-      # этого flet build windows падает на "Building with plugins requires
-      # symlink support".
-      - name: Включить режим разработчика
-        run: |
-          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" `
-            /t REG_DWORD /f /v "AllowDevelopmentWithoutDevLicense" /d "1"
-
-      - name: flet build windows
+      # -D — сборка в папку, а не в один файл. Один файл каждый запуск
+      # распаковывает себя в %TEMP%\_MEIxxxx, и именно это ловят эвристики
+      # антивирусов; папка так не делает и стартует быстрее.
+      # pynput выбирает бэкенд через importlib.import_module, статический анализ
+      # PyInstaller его не видит — отсюда --hidden-import. ASSETS_DIR считается
+      # как <корень>/assets относительно app/main.py, поэтому assets кладём
+      # рядом тем же деревом.
+      - name: Сборка (flet pack)
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
         run: |
           $ErrorActionPreference = 'Stop'
-          flet build windows --no-rich-output
-          if ($LASTEXITCODE -ne 0) { throw "flet build windows завершился с кодом $LASTEXITCODE." }
-          if (-not (Test-Path 'build\windows\Centurio.exe')) {
-            throw 'Ожидал build\windows\Centurio.exe после сборки, но его нет.'
+          flet pack main.py -y -D `
+            --name Centurio `
+            --icon assets/icon.png `
+            --add-data "assets;assets" `
+            --hidden-import pynput.keyboard._win32 pynput.mouse._win32 pystray._win32 `
+            --product-name Centurio `
+            --company-name Centurio `
+            --file-description "Centurio — панель запуска приложений" `
+            --product-version $env:VERSION `
+            --file-version "$($env:VERSION).0"
+          if ($LASTEXITCODE -ne 0) { throw "flet pack завершился с кодом $LASTEXITCODE." }
+          if (-not (Test-Path 'dist\Centurio\Centurio.exe')) {
+            throw 'Ожидал dist\Centurio\Centurio.exe после сборки, но его нет.'
           }
-          Write-Host 'Собран бандл build\windows'
+
+      # Собранное должно хотя бы подниматься. Без этого шага в релиз уже уехала
+      # версия, которая молча закрывалась при старте.
+      - name: Проверить, что запускается
+        env:
+          CENTURIO_DEBUG: "1"
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $log = Join-Path $env:APPDATA 'Centurio\centurio.log'
+          Remove-Item $log -Force -ErrorAction SilentlyContinue
+
+          $proc = Start-Process -FilePath 'dist\Centurio\Centurio.exe' -PassThru
+          Start-Sleep -Seconds 25
+          $exitedEarly = $proc.HasExited
+          $code = if ($exitedEarly) { $proc.ExitCode } else { $null }
+          if (-not $exitedEarly) {
+            $proc.Kill()
+            $proc.WaitForExit(5000) | Out-Null
+          }
+
+          # Лог печатаем всегда: на нём же разбираются падения.
+          if (Test-Path $log) {
+            Write-Host '--- centurio.log ---'
+            Get-Content $log -Encoding utf8 | Select-Object -Last 100
+            Write-Host '--- конец centurio.log ---'
+          } else {
+            Write-Host 'centurio.log не создан — падение раньше log.setup().'
+          }
+
+          if ($exitedEarly) {
+            throw "Centurio.exe завершился сам за 25 с (код $code) — сборка не запускается."
+          }
+          if ((Test-Path $log) -and (Select-String -Path $log -Pattern 'CRITICAL' -Quiet)) {
+            throw 'В centurio.log есть CRITICAL — необработанное исключение при старте.'
+          }
+          Write-Host 'Приложение поднялось и держалось 25 с.'
 
       - name: Установщик (Inno Setup)
         run: |
@@ -173,43 +190,17 @@ jobs:
             throw 'Ожидал installer\Output\CenturioSetup.exe, но его нет.'
           }
 
-      # Забираем установщик до flet pack: pack с -y сносит каталог build\
-      # целиком, вместе с build\windows, из которого собран установщик.
-      - name: Отложить установщик
+      - name: Сложить артефакты
         env:
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path 'release' | Out-Null
           Copy-Item 'installer\Output\CenturioSetup.exe' "release\CenturioSetup-$($env:VERSION).exe"
-
-      # Портативная сборка. pynput выбирает бэкенд через importlib.import_module,
-      # статический анализ PyInstaller его не видит — отсюда --hidden-import.
-      # ASSETS_DIR считается как <корень>/assets относительно app/main.py, что под
-      # onefile указывает внутрь sys._MEIPASS, поэтому assets кладём туда же.
-      - name: Портативный exe (flet pack)
-        env:
-          VERSION: ${{ steps.meta.outputs.version }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          flet pack main.py -y `
-            --name Centurio `
-            --icon assets/icon.png `
-            --add-data "assets;assets" `
-            --hidden-import pynput.keyboard._win32 pynput.mouse._win32 pystray._win32 `
-            --product-name Centurio `
-            --company-name Centurio `
-            --file-description "Centurio — панель запуска приложений" `
-            --product-version $env:VERSION `
-            --file-version "$($env:VERSION).0"
-          if ($LASTEXITCODE -ne 0) { throw "flet pack завершился с кодом $LASTEXITCODE." }
-          if (-not (Test-Path 'dist\Centurio.exe')) {
-            throw 'Ожидал dist\Centurio.exe после flet pack, но его нет.'
-          }
-          Copy-Item 'dist\Centurio.exe' "release\Centurio-$($env:VERSION)-portable.exe"
-
-      - name: Что собралось
-        run: Get-ChildItem 'release' -File | Select-Object Name, @{n='МБ';e={[math]::Round($_.Length/1MB,1)}}
+          Compress-Archive -Path 'dist\Centurio\*' `
+            -DestinationPath "release\Centurio-$($env:VERSION)-portable.zip" -Force
+          Get-ChildItem 'release' -File |
+            Select-Object Name, @{n='МБ';e={[math]::Round($_.Length/1MB,1)}}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -246,12 +237,12 @@ jobs:
             "Сборка Centurio $($env:VERSION) из коммита $($env:GITHUB_SHA)."
             ""
             "- **CenturioSetup-$($env:VERSION).exe** — установщик: ставит Centurio, кладёт"
-            "  ярлык в меню «Пуск», по желанию включает автозапуск. Обычный способ поставить"
-            "  программу."
-            "- **Centurio-$($env:VERSION)-portable.exe** — один переносимый файл, запускается"
-            "  без установки."
+            "  ярлык в меню «Пуск», по желанию включает автозапуск. Это и есть тот файл,"
+            "  который проще всего отправить на тесты."
+            "- **Centurio-$($env:VERSION)-portable.zip** — та же сборка без установки:"
+            "  распаковать и запустить Centurio.exe."
             ""
-            "Настройки в обоих случаях лежат в %APPDATA%\Centurio."
+            "Настройки в обоих случаях лежат в %APPDATA%\Centurio, там же centurio.log."
           ) -join "`n"
           Set-Content -Path 'release-notes.md' -Value $notes -Encoding utf8
 

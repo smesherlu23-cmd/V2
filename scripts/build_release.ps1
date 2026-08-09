@@ -1,16 +1,18 @@
 <#
 .SYNOPSIS
-    Builds Centurio's Windows release: `flet build windows`, then (if
-    Inno Setup is installed) the CenturioSetup.exe installer.
+    Builds Centurio's Windows release: `flet pack` (PyInstaller, one folder),
+    then (if Inno Setup is installed) the CenturioSetup.exe installer.
 
 .DESCRIPTION
     Runs the same version/metadata check, lint and test suite CI runs,
-    fails fast if they don't pass, then produces build\windows\Centurio.exe
+    fails fast if they don't pass, then produces dist\Centurio\Centurio.exe
     and — when ISCC.exe (Inno Setup 6) can be found — installer\Output\
     CenturioSetup.exe from installer\centurio.iss.
 
-    `flet build windows` and Inno Setup are both Windows-only tools, so
-    this script only runs on Windows.
+    One folder rather than one file on purpose: a one-file exe unpacks itself
+    into %TEMP% on every start, which is what antivirus heuristics flag.
+
+    Inno Setup is Windows-only, so this script only runs on Windows.
 
 .PARAMETER SkipTests
     Skip the packaging-metadata check, ruff and pytest before building.
@@ -18,7 +20,7 @@
     on a build-only change you already know is clean.
 
 .PARAMETER SkipInstaller
-    Stop after `flet build windows` — don't look for Inno Setup or try
+    Stop after `flet pack` — don't look for Inno Setup or try
     to build the installer, even if ISCC.exe is on PATH.
 
 .PARAMETER NoClean
@@ -65,8 +67,8 @@ function Invoke-Checked([string]$Description, [scriptblock]$Command) {
 }
 
 if (-not $IsWindows -and $env:OS -ne 'Windows_NT') {
-    Fail ("Сборка возможна только на Windows: 'flet build windows' и Inno Setup " +
-          "работают исключительно там.")
+    Fail ("Сборка возможна только на Windows: установщик собирает Inno Setup, " +
+          "а он работает исключительно там.")
 }
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -127,14 +129,28 @@ Write-Host "Версия: $version"
 if (-not $NoClean) {
     Write-Step 'Чистка предыдущей сборки'
     Remove-Item -Recurse -Force (Join-Path $root 'build') -ErrorAction SilentlyContinue
+    Remove-Item -Recurse -Force (Join-Path $root 'dist') -ErrorAction SilentlyContinue
     Remove-Item -Recurse -Force (Join-Path $root 'installer\Output') -ErrorAction SilentlyContinue
 }
 
-Write-Step 'flet build windows'
-Write-Host 'Первая сборка может занять несколько минут — flet готовит инструменты сборки.'
-Invoke-Checked 'flet build windows' { flet build windows }
+Write-Step 'Сборка (flet pack)'
+python -m pip show pyinstaller *>$null
+if ($LASTEXITCODE -ne 0) {
+    Invoke-Checked 'pip install pyinstaller' { python -m pip install pyinstaller }
+}
+Invoke-Checked 'flet pack' {
+    flet pack main.py -y -D `
+        --name Centurio `
+        --icon assets/icon.png `
+        --add-data "assets;assets" `
+        --hidden-import pynput.keyboard._win32 pynput.mouse._win32 pystray._win32 `
+        --product-name Centurio `
+        --company-name Centurio `
+        --product-version $version `
+        --file-version "$version.0"
+}
 
-$exePath = Join-Path $root 'build\windows\Centurio.exe'
+$exePath = Join-Path $root 'dist\Centurio\Centurio.exe'
 if (-not (Test-Path $exePath)) {
     Fail "Ожидал файл $exePath после сборки, но его нет — сборка не удалась."
 }

@@ -1,8 +1,8 @@
 ; Inno Setup script for Centurio.
-; Packages the `flet build windows` output into a Windows installer with a
+; Packages the PyInstaller one-folder build into a Windows installer with a
 ; Start-Menu shortcut and an optional "launch at startup" checkbox.
 ;
-; Build first:   flet build windows
+; Build first:   flet pack main.py -D --name Centurio ...
 ; Then compile:  "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\centurio.iss
 ; Output:        installer\Output\CenturioSetup.exe
 
@@ -10,8 +10,10 @@
 #define MyAppVersion "1.1.0"
 #define MyAppPublisher "Centurio"
 #define MyAppExeName "Centurio.exe"
-; flet build windows output directory (relative to this script's parent):
-#define BuildDir "..\build\windows"
+; PyInstaller one-folder output (relative to this script's parent). One-folder
+; rather than one-file on purpose: a one-file exe unpacks itself into %TEMP% on
+; every start, which is what antivirus heuristics flag.
+#define BuildDir "..\dist\Centurio"
 
 [Setup]
 AppId={{B2F1C7A0-6C1E-4D2E-9E4A-CENTURIO0001}}
