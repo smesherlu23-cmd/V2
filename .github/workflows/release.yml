@@ -64,7 +64,10 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
-          $iscc = "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe"
+          # $env:ProgramFiles(x86) without braces parses as $env:ProgramFiles
+          # followed by the literal text "(x86)" — PowerShell needs the
+          # ${env:...} form to include parens in the variable name.
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           & $iscc installer\centurio.iss
 
       - name: Read version
