@@ -7,7 +7,13 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    # Pinned rather than windows-latest: the Flutter toolchain flet build
+    # windows drives (currently stable 3.29.2) picks the CMake generator
+    # string for whatever Visual Studio it finds via a version lookup table
+    # that only goes up to VS2022 — a newer VS on windows-latest gets
+    # misread and it falls back to a hardcoded "Visual Studio 16 2019",
+    # which then fails outright since no such version is installed at all.
+    runs-on: windows-2022
 
     steps:
       - uses: actions/checkout@v4
