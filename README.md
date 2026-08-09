@@ -41,6 +41,13 @@ python main.py
 `-SkipInstaller` — собрать только exe, `-NoClean` — не чистить прошлую сборку.
 Подробности: `Get-Help .\scripts\build_release.ps1 -Full`.
 
+Без Windows под рукой то же самое делает workflow «Build Windows»
+(`.github/workflows/build-windows.yml`) — запускается вручную со вкладки Actions
+или пушем тега `v*`. Он гоняет те же проверки, собирает на `windows-latest`
+установщик `CenturioSetup-<версия>.exe` и портативный одиночный
+`Centurio-<версия>-portable.exe` (`flet pack`), после чего прикладывает оба
+к GitHub Release с тегом `v<версия>` и к артефактам прогона.
+
 ## Ключи запуска
 
 | Ключ | Действие |

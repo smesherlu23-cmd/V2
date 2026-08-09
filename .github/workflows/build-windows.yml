@@ -1,0 +1,219 @@
+name: Build Windows
+
+# Сборка Windows-релиза Centurio. Локальный аналог — scripts\build_release.ps1,
+# но flet build windows и Inno Setup работают только на Windows, поэтому
+# единственный воспроизводимый способ собрать релиз из не-Windows окружения —
+# этот workflow на windows-latest.
+#
+# Выпускает два файла:
+#   CenturioSetup-<версия>.exe        установщик (flet build windows + Inno Setup)
+#   Centurio-<версия>-portable.exe    один переносимый exe (flet pack / PyInstaller)
+#
+# Оба прикрепляются к GitHub Release с тегом v<версия> и заодно остаются
+# артефактами прогона.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Тег релиза (по умолчанию v<версия из app/__init__.py>)"
+        required: false
+        type: string
+      prerelease:
+        description: "Пометить релиз как предварительный"
+        required: false
+        default: true
+        type: boolean
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest ruff pyinstaller
+
+      - name: Версия и тег
+        id: meta
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $match = Select-String -Path 'app/__init__.py' -Pattern '__version__\s*=\s*"([\d.]+)"'
+          if (-not $match) { throw 'Не удалось прочитать __version__ из app/__init__.py.' }
+          $version = $match.Matches[0].Groups[1].Value
+
+          # Тег берём из входа, иначе из пуша тега, иначе из версии в коде.
+          $tag = $env:INPUT_TAG
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            $tag = if ($env:REF_TYPE -eq 'tag') { $env:REF_NAME } else { "v$version" }
+          }
+
+          "version=$version" | Out-File $env:GITHUB_OUTPUT -Append
+          "tag=$tag" | Out-File $env:GITHUB_OUTPUT -Append
+          Write-Host "Centurio $version -> релиз $tag"
+
+      # Те же проверки, что гоняет scripts\build_release.ps1: рассогласование
+      # версий между app/__init__.py, pyproject.toml и installer\centurio.iss
+      # дало бы установщик с чужой версией в заголовке.
+      - name: Проверки (метаданные, линтер, тесты)
+        env:
+          CI: "1"
+        run: |
+          python -m pytest -q -k test_packaging_metadata
+          if ($LASTEXITCODE -ne 0) { throw "Проверка версии/метаданных не прошла ($LASTEXITCODE)." }
+          python -m ruff check .
+          if ($LASTEXITCODE -ne 0) { throw "ruff не прошёл ($LASTEXITCODE)." }
+          python -m pytest -q
+          if ($LASTEXITCODE -ne 0) { throw "pytest не прошёл ($LASTEXITCODE)." }
+
+      # Flutter собирает windows-приложение с плагинами через симлинки, а они
+      # на Windows требуют режима разработчика. На раннерах он выключен, и без
+      # этого flet build windows падает на "Building with plugins requires
+      # symlink support".
+      - name: Включить режим разработчика
+        run: |
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" `
+            /t REG_DWORD /f /v "AllowDevelopmentWithoutDevLicense" /d "1"
+
+      - name: flet build windows
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flet build windows --no-rich-output
+          if ($LASTEXITCODE -ne 0) { throw "flet build windows завершился с кодом $LASTEXITCODE." }
+          if (-not (Test-Path 'build\windows\Centurio.exe')) {
+            throw 'Ожидал build\windows\Centurio.exe после сборки, но его нет.'
+          }
+          Write-Host 'Собран бандл build\windows'
+
+      - name: Установщик (Inno Setup)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $candidates = @(
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          )
+          $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source }
+          if (-not $iscc) { $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1 }
+          if (-not $iscc) {
+            Write-Host 'Inno Setup не найден — ставлю через choco.'
+            choco install innosetup -y --no-progress
+            $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $iscc) { throw 'ISCC.exe не найден даже после установки Inno Setup.' }
+
+          & $iscc 'installer\centurio.iss'
+          if ($LASTEXITCODE -ne 0) { throw "ISCC завершился с кодом $LASTEXITCODE." }
+          if (-not (Test-Path 'installer\Output\CenturioSetup.exe')) {
+            throw 'Ожидал installer\Output\CenturioSetup.exe, но его нет.'
+          }
+
+      # Забираем установщик до flet pack: pack с -y сносит каталог build\
+      # целиком, вместе с build\windows, из которого собран установщик.
+      - name: Отложить установщик
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path 'release' | Out-Null
+          Copy-Item 'installer\Output\CenturioSetup.exe' "release\CenturioSetup-$($env:VERSION).exe"
+
+      # Портативная сборка. pynput выбирает бэкенд через importlib.import_module,
+      # статический анализ PyInstaller его не видит — отсюда --hidden-import.
+      # ASSETS_DIR считается как <корень>/assets относительно app/main.py, что под
+      # onefile указывает внутрь sys._MEIPASS, поэтому assets кладём туда же.
+      - name: Портативный exe (flet pack)
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flet pack main.py -y `
+            --name Centurio `
+            --icon assets/icon.png `
+            --add-data "assets;assets" `
+            --hidden-import pynput.keyboard._win32 pynput.mouse._win32 pystray._win32 `
+            --product-name Centurio `
+            --company-name Centurio `
+            --file-description "Centurio — панель запуска приложений" `
+            --product-version $env:VERSION `
+            --file-version "$($env:VERSION).0"
+          if ($LASTEXITCODE -ne 0) { throw "flet pack завершился с кодом $LASTEXITCODE." }
+          if (-not (Test-Path 'dist\Centurio.exe')) {
+            throw 'Ожидал dist\Centurio.exe после flet pack, но его нет.'
+          }
+          Copy-Item 'dist\Centurio.exe' "release\Centurio-$($env:VERSION)-portable.exe"
+
+      - name: Что собралось
+        run: Get-ChildItem 'release' -File | Select-Object Name, @{n='МБ';e={[math]::Round($_.Length/1MB,1)}}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: centurio-windows-${{ steps.meta.outputs.version }}
+          path: release/*
+          if-no-files-found: error
+
+      - name: Публикация релиза
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Ненулевой код gh release view здесь — норма (релиза ещё нет), так что
+          # ошибки нативных команд не должны валить шаг сами по себе.
+          if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+            $PSNativeCommandUseErrorActionPreference = $false
+          }
+          $files = @(Get-ChildItem 'release' -File | ForEach-Object { $_.FullName })
+
+          gh release view $env:TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Релиз $env:TAG уже есть — обновляю файлы."
+            gh release upload $env:TAG @files --clobber
+            if ($LASTEXITCODE -ne 0) { throw "gh release upload завершился с кодом $LASTEXITCODE." }
+            return
+          }
+
+          $notes = @(
+            "Сборка Centurio $($env:VERSION) из коммита $($env:GITHUB_SHA)."
+            ""
+            "- **CenturioSetup-$($env:VERSION).exe** — установщик: ставит Centurio, кладёт"
+            "  ярлык в меню «Пуск», по желанию включает автозапуск. Обычный способ поставить"
+            "  программу."
+            "- **Centurio-$($env:VERSION)-portable.exe** — один переносимый файл, запускается"
+            "  без установки."
+            ""
+            "Настройки в обоих случаях лежат в %APPDATA%\Centurio."
+          ) -join "`n"
+          Set-Content -Path 'release-notes.md' -Value $notes -Encoding utf8
+
+          $extra = @()
+          if ($env:PRERELEASE -eq 'true') { $extra += '--prerelease' }
+
+          gh release create $env:TAG @files `
+            --target $env:GITHUB_SHA `
+            --title "Centurio $($env:VERSION)" `
+            --notes-file 'release-notes.md' `
+            @extra
+          if ($LASTEXITCODE -ne 0) { throw "gh release create завершился с кодом $LASTEXITCODE." }
