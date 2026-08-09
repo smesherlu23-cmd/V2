@@ -30,11 +30,6 @@ on:
         type: boolean
   push:
     tags: ["v*"]
-    # ВРЕМЕННО: тег из этой сессии не запушить (git-прокси отдаёт 403), а
-    # workflow_dispatch появляется только когда workflow лежит в ветке по
-    # умолчанию. Выпускаем 1.1.1 с ветки — тег заведёт gh release create.
-    # Убрать вместе с веткой в условии публикации ниже.
-    branches: ["claude/build-publish-exe-itwkkz"]
 
 permissions:
   contents: write
@@ -210,11 +205,9 @@ jobs:
           path: release/*
           if-no-files-found: error
 
-      # Обычно только с тега или ручного запуска. Ветка — временно, ради 1.1.1.
+      # Публикуем только с тега или ручного запуска.
       - name: Публикация релиза
-        if: >-
-          github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
-          || github.ref_name == 'claude/build-publish-exe-itwkkz'
+        if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.meta.outputs.tag }}
